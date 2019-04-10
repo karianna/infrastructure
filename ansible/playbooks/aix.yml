@@ -9,8 +9,8 @@
   become: yes
   environment:
     PATH: "/opt/IBM/xlC/13.1.3/bin:/opt/freeware/bin:{{ ansible_env.PATH }}"
-    PERL_MB_OPT: "--install_base /home/{{ Jenkins_Username }}"
-    PERL_MM_OPT: "INSTALL_BASE=/home/{{ Jenkins_Username }}"
+    PERL_MB_OPT: "--install_base /opt/freemarker"
+    PERL_MM_OPT: "INSTALL_BASE=/opt/freemarker"
   vars:
     swap_size: 4096
 
@@ -58,6 +58,7 @@
           file:
             path: /usr/local/bin
             state: directory
+          tags: ramdisk
 
         - name: Update inittab
           lineinfile:
@@ -89,6 +90,7 @@
           shell: openssl version >/dev/null 2>&1
           register: does_openssl_exist
           ignore_errors: yes
+          tags: openssl
 
         - name: Transfer Openssl to remote host
           copy:
@@ -136,6 +138,7 @@
             - rpm_remove
             # TODO: rpm used in place of yum or rpm_key module
             - skip_ansible_lint
+
       ####################################
       # Install yum and update to latest #
       ####################################
@@ -220,9 +223,10 @@
         - name: Ensure perl from /opt/freeware/bin is the default in /usr/bin
           shell: mv /usr/bin/perl /usr/bin/perl.old && ln -s /opt/freeware/bin/perl /usr/bin/
           ignore_errors: True
+          tags: rpm_install
 
       ##############
-      # IBM Java 7 #
+      # Boot JDK 7 #
       ##############
         - name: Check for Java7 availability
           stat:
@@ -245,7 +249,7 @@
           tags: java7
 
       ##############
-      # IBM Java 8 #
+      # Boot JDK 8 #
       ##############
         - name: Get java8 path information
           stat:
@@ -258,17 +262,18 @@
             path: /usr/java8_64
             state: directory
           when: java8.stat.isdir is not defined
+          tags: java8
 
         - name: Transfer and Extract Java8
           unarchive:
-            src: https://api.adoptopenjdk.net/v2/binary/releases/openjdk8?openjdk_impl=openj9&os=aix&arch=ppc64&release=latest&type=jdk
+            src: https://api.adoptopenjdk.net/v2/binary/releases/openjdk8?openjdk_impl={{ bootjdk }}&os=aix&arch=ppc64&release=latest&type=jdk
             dest: /usr/java8_64
             remote_src: yes
           when: java8.stat.isdir is not defined
           tags: java8
 
       ##############
-      # IBM Java 9 #
+      # Boot JDK 9 #
       ##############
         - name: Check for Java9 availability
           stat:
@@ -281,19 +286,20 @@
             path: /usr/java9_64
             state: directory
           when: java9.stat.isdir is not defined
+          tags: java9
 
         - name: Transfer and Extract Java9
           unarchive:
-            src: https://api.adoptopenjdk.net/v2/binary/releases/openjdk9?openjdk_impl=openj9&os=aix&arch=ppc64&release=latest&type=jdk
+            src: https://api.adoptopenjdk.net/v2/binary/releases/openjdk9?openjdk_impl={{ bootjdk }}&os=aix&arch=ppc64&release=latest&type=jdk
             dest: /usr/java9_64
             remote_src: yes
           when: java9.stat.isdir is not defined
           tags: java9
 
 
-      ##############
-      # IBM Java 10 #
-      ##############
+        #################
+        # OpenJ9 JDK 10 #
+        #################
         - name: Check for Java10 availability
           stat:
             path: /usr/java10_64
@@ -305,6 +311,7 @@
             path: /usr/java10_64
             state: directory
           when: java10.stat.isdir is not defined
+          tags: java10
 
         - name: Transfer and Extract Java9
           unarchive:
@@ -314,9 +321,9 @@
           when: java10.stat.isdir is not defined
           tags: java10
 
-        ##############
-        # IBM Java 11 #
-        ##############
+        #################
+        # OpenJ9 JDK 11 #
+        #################
         - name: Check for Java11 availability
           stat:
             path: /usr/java11_64
@@ -328,6 +335,7 @@
             path: /usr/java11_64
             state: directory
           when: java11.stat.isdir is not defined
+          tags: java11
 
         - name: Transfer and Extract Java11
           unarchive:
@@ -337,47 +345,29 @@
           when: java11.stat.isdir is not defined
           tags: java11
 
-      ###############
-      # Boot JDK 11 #
-      ###############
-        - name: Check for Java11 install
+        #################
+        # OpenJ9 JDK 12 #
+        #################
+        - name: Check for Java12 availability
           stat:
-            path: /usr/java11_64
-          register: java11
-          tags: java11
+            path: /usr/java12_64
+          register: java12
+          tags: java12
 
-        - debug:
-            msg: "Java11 found, skipping download and installation"
-          when: java11.stat.isdir is defined
-          tags: java11
-
-        - name: Create Java11 directory
+        - name: Create /usr/java12_64 if it doesn't exist
           file:
-            path: /usr/java11_64
+            path: /usr/java12_64
             state: directory
-          when: java11.stat.isdir is not defined
-          tags: java11
+          when: java12.stat.isdir is not defined
+          tags: java12
 
-        - name: Download and Extract Java11
+        - name: Transfer and Extract Java12
           unarchive:
-            src: https://api.adoptopenjdk.net/v2/binary/releases/openjdk11?openjdk_impl=openj9&os=aix&arch=ppc64&release=latest&type=jdk&heap_size=normal
-            dest: /usr/java11_64
+            src: https://api.adoptopenjdk.net/v2/binary/releases/openjdk12?openjdk_impl=openj9&os=aix&arch=ppc64&release=latest&type=jdk
+            dest: /usr/java12_64
             remote_src: yes
-            extra_opts:
-              - --strip=1
-          when: java11.stat.isdir is not defined
-          tags: java11
-
-        - name: Test Java11
-          command: /usr/java11_64/bin/java -version
-          register: java11_version
-          tags: java11
-
-        - name: Display Java11 version information
-          debug:
-            msg: "{{ java11_version }}"
-          tags: java11
-
+          when: java12.stat.isdir is not defined
+          tags: java12
 
       #########################################################################
       # Install X11 extensions                                                #
@@ -407,6 +397,7 @@
             state: absent
             path: /tmp/X11.adt
           when: does_X11_adt_ext_exist.rc != 0
+          tags: x11
 
       ############
       # IBM XL C #
@@ -596,16 +587,16 @@
               /bin/bash
           tags: login_shell
 
-        - name: Add bash to available login shells
+        - name: Set variables for global environment
           blockinfile:
             dest: /etc/environment
             block: |
               AIXTHREAD_HRT=true
               PKG_CONFIG_PATH=/opt/freeware/lib64/pkgconfig:/opt/freeware/lib/pkgconfig
-              PERL5LIB=/home/{{ Jenkins_Username }}/lib/perl5
+              PERL5LIB=/opt/freemarker/lib/perl5
           tags: login_shell
 
-        - name: Add bash to available login shells
+        - name: Add freeware and xlc to PATH for global environment
           replace:
             path: /etc/environment
             regexp: 'PATH=/usr/bin'
@@ -655,6 +646,7 @@
           file:
             state: absent
             path: /home/{{ Jenkins_Username }}/.profile
+          tags: jenkins_user
 
         - name: Set user capabilites
           command: chuser capabilities=CAP_NUMA_ATTACH,CAP_BYPASS_RAC_VMM,CAP_PROPAGATE {{ Jenkins_Username }}
@@ -757,14 +749,12 @@
         - name: Install Text::CSV
           command: cpan -i Text::CSV
           when: TextCSV_is_installed.rc != 0
-          tags:
-            - cpan
+          tags: cpan
 
         - name: Install XML::Parser
           command: cpan -i XML::Parser
           when: XMLParser_is_installed.rc != 0
-          tags:
-            - cpan
+          tags: cpan
 
       ##################
       # Nagios plugins #
@@ -772,6 +762,7 @@
         - name: Include Nagios Playbook
           include_tasks: nagios/nagios_aix.yml
           when: Nagios_Plugins == "Enabled"
+          tags: nagios
 
       #####################
       # superuser account #
