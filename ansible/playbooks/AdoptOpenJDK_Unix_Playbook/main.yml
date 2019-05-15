@@ -5,6 +5,10 @@
 - hosts: "{{ groups['Vendor_groups'] | default('localhost:build:test:!*zos*:!*win*:!*macos*:!*aix*') }}"
   gather_facts: yes
   tasks:
+    - block:
+      # Set standard variables
+        - name: Load AdoptOpenJDKs variable file
+          include_vars: group_vars/all/adoptopenjdk_variables.yml
   environment:
     PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
 
@@ -40,13 +44,14 @@
     - adoptopenjdk9               # JDK10 build bootstrap
     - adoptopenjdk10              # JDK11 build bootstrap
     - adoptopenjdk11              # JDK12 build bootstrap
-    - OpenSSL                     # OpenJ9
+    - adoptopenjdk12              # JDK13 build bootstrap
     - role: local_srcinstall
       src_tarball: https://github.com/protocolbuffers/protobuf/releases/download/v3.5.1/protobuf-cpp-3.5.1.tar.gz
       installed_target: /usr/local/bin/protoc
       when:
         - (ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Ubuntu" or ansible_distribution == "SLES")
         - ansible_architecture == "x86_64"
+    - OpenSSL102                  # OpenJ9
     - Nagios_Plugins              # AdoptOpenJDK Infrastructure
     - Nagios_Master_Config        # AdoptOpenJDK Infrastructure
     - Nagios_Tunnel               # AdoptOpenJDK Infrastructure
