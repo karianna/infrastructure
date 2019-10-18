@@ -1,5 +1,24 @@
 # Ansible playbooks to download and install dependencies for OpenJDK on various platforms
 
+# Quickstart Guide
+
+To test the ansible scripts, you'll need to install the following programs.
+
+For macOS:
+
+1. Install Homebrew 2.1.7 or later
+  ```bash
+  /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+  ```
+2. Install Vagrant 2.2.5 or later
+  ```bash
+  brew cask install vagrant
+  ```
+3. Install Virtualbox 6.0.8 or later:
+  ```bash
+  brew cask install virtualbox
+  ```
+ 
 # Running via Vagrant and VirtualBox
 
 To test the ansible scripts you can set up a Virtual Machine isolated from your own local system.
@@ -77,6 +96,32 @@ Yes, in order to access the package repositories (we will perform either `yum in
     ```
 
 4) The Ansible playbook will download and install any dependencies needed to build OpenJDK
+
+## How do I run the playbook on a Windows Machine?
+
+As Ansible can't run on Windows, it has to be run on a seperate system and then pointed at a Windows machine (such as a VM). To test the playbook, a vagrant VM can be used.
+You can do this by following these steps:
+
+1) Run `vagrant plugin install vagrant-disksize`. This will install a plugin that allows the user to specify the disksize of the VM.
+2) `git clone "https://github.com/AdoptOpenJdk/openjdk-infrastructure/"`
+3) `ln -sf Vagrantfile.WindowsS12 Vagrantfile && vagrant up` in the cloned `/openjdk-infrastructure/ansible` directory
+4) Note the IP address that is output from running `vagrant up` and place it into a text file. e.g. `hosts.win`. Place this text file in `../anisble/playbooks/AdoptopenJDK_Windows_Playbook`
+5) Edit `../AdoptOpenJDK_Windows_Playbook/main.yml` so the `- hosts :{{ groups['Vendor_groups'] ... etc` becomes `- hosts: all`
+6) Add into `../AdoptOpenJDK_Windows_Playbook/group_vars/all/adoptopenjdk_variables.yml` the line `ansible_winrm_transport: credssp`. You'll also need to uncomment and change `ansible_password: CHANGE_ME`.
+7) From the `../ansible` directory, running `sudo ansible-playbook -i playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win -u vagrant playbooks/AdoptOpenJDK_Windows_Playbook/main.yml` will start the playbook.
+
+Note: if using a macOS Mojave, `export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=yes` will be required before starting the playbook.
+ 
+## Can I have multiple VMs on different OSs?
+
+As vagrant uses Virtualbox to create VMs, multiple VMs on different OSs can be setup.
+You can do this by following these steps:
+
+  1. Make a copy of the existing directory you have.
+  2. The "vagrantfile" is an alias to the vagrantfile that is labelled with the desired OS. Replace this so it is an alias of the OS you want. (default OS is CentOS)
+  3. Continue the vagrant functions as normal.
+
+To access each vagrant VM, you'll need to be in the correct directory to `vagrant ssh` into. 
 
 ## Which playbook do I run?
 

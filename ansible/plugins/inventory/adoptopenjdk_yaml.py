@@ -45,9 +45,9 @@ valid = {
   'type': ('build', 'test', 'jck', 'infrastructure'),
 
   # providers - validated for consistency
-  'provider': ('azure', 'cloudcone', 'joyent', 'marist', 'osuosl', 'scaleway',
-        'macstadium', 'macincloud', 'softlayer', 'packet', 'linaro', '1and1',
-        'digitalocean', 'ibm')
+  'provider': ('azure', 'joyent', 'marist', 'osuosl', 'scaleway',
+        'macstadium', 'macincloud', 'softlayer', 'packet', 'linaro',
+        'digitalocean', 'ibm', 'godaddy', 'openlab')
 }
 
 # customisation options per host:
@@ -74,7 +74,7 @@ def main():
     inventory_path = path.abspath(path.join(basepath, "..", "..", "inventory.yml"))
     with open(inventory_path, 'r') as stream:
         try:
-            hosts = yaml.load(stream)
+            hosts = yaml.load(stream, Loader=yaml.FullLoader)
 
         except yaml.YAMLError as exc:
             print(exc)
