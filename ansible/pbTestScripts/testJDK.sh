@@ -2,12 +2,14 @@
 
 export MAKE_COMMAND="make"
 if [[ $(uname) == "FreeBSD" ]]; then
-	mv $HOME/openjdk-build/workspace/build/src/build/bsd-x86_64-normal-server-release/images/jdk8* $HOME
 	export MAKE_COMMAND="gmake"
+	cp -r $HOME/openjdk-build/workspace/build/src/build/*/jdk* $HOME
+	export TEST_JDK_HOME=$HOME/jdk
 else
-	mv $HOME/openjdk-build/workspace/build/src/build/linux-x86_64-normal-server-release/images/jdk8* $HOME
+	mv $HOME/openjdk-build/workspace/build/src/build/*/images/jdk* $HOME
+	export TEST_JDK_HOME=$(find $HOME -maxdepth 1 -type d -name "*jdk*"|grep -v ".*jre.*"|grep -v ".*test-image.*)
 fi
-export TEST_JDK_HOME=$(find $HOME -maxdepth 1 -type d -name "*jdk8u*"|grep -v ".*jre.*")
+
 mkdir -p $HOME/testLocation
 [ ! -d $HOME/testLocation/openjdk-tests ] && git clone https://github.com/adoptopenjdk/openjdk-tests $HOME/testLocation/openjdk-tests
 $HOME/testLocation/openjdk-tests/get.sh -t $HOME/testLocation/openjdk-tests

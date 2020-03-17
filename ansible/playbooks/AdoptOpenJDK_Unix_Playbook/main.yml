@@ -29,8 +29,8 @@
       tags: [build_tools, build_tools_openj9]
     - ant                         # Testing
     - Ant-Contrib                 # Testing
+    - maven                       # Testing
     - GIT_Source
-    - CPAN
     - gmake
     - Docker                      # Testing
     - role: NVidia_Cuda_Toolkit   # OpenJ9
@@ -50,6 +50,9 @@
     - role: nasm                  # OpenJ9
       when: ansible_architecture == 'x86_64'
       tags: [build_tools, build_tools_openj9]
+    - role: adoptopenjdk_install
+      jdk_version: 8
+      tags: build_tools
     - role: adoptopenjdk_install  # JDK11 Build Bootstrap
       jdk_version: 10
       tags: build_tools
@@ -58,13 +61,6 @@
       tags: build_tools
     - role: adoptopenjdk_install  # JDK14 Build Bootstrap
       jdk_version: 13
-      tags: build_tools
-    - role: local_srcinstall
-      src_tarball: https://github.com/protocolbuffers/protobuf/releases/download/v3.5.1/protobuf-cpp-3.5.1.tar.gz
-      installed_target: /usr/local/bin/protoc
-      when:
-        - (ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "Ubuntu" or ansible_distribution == "SLES" or ansible_distribution == "Debian" or ansible_distribution == "openSUSE")
-        - ansible_architecture == "x86_64"
     - OpenSSL102                  # OpenJ9
     - Nagios_Plugins              # AdoptOpenJDK Infrastructure
     - Nagios_Master_Config        # AdoptOpenJDK Infrastructure
