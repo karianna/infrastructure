@@ -12,8 +12,10 @@ runTest=false
 vmHalt=true
 cleanWorkspace=false
 newVagrantFiles=false
+fastMode=false
 skipFullSetup=''
 jdkToBuild=''
+buildHotspot=''
 
 # Takes all arguments from the script, and determines options
 processArgs()
@@ -29,7 +31,7 @@ processArgs()
 			"--build" | "-b" )
 				testNativeBuild=true;;
 			"--JDK-Version" | "-jdk" )
-				jdkToBuild="--version $1"; shift;;
+				jdkToBuild="$1"; shift;;
 			"--retainVM" | "-r" )
 				retainVM=true;;
 			"--URL" | "-u" )
@@ -43,9 +45,11 @@ processArgs()
 			"--new-vagrant-files" | "-nv" )
 				newVagrantFiles=true;;
 			"--skip-more" | "-sm" )
-				skipFullSetup=",nvidia_cuda_toolkit,MSVS_2010,MSVS_2017";;
+				fastMode=true;;
 			"--build-repo" | "-br" )
 				buildURL="--URL $1"; shift;;
+			"--build-hotspot" )
+				buildHotspot="--hotspot";;
 			"--help" | "-h" )
 				usage; exit 0;;
 			*) echo >&2 "Invalid option: ${opt}"; echo "This option was unrecognised."; usage; exit 1;;
@@ -59,8 +63,9 @@ usage()
 					--all | -a 				Builds and tests playbook through every OS
 					--retainVM | -r				Option to retain the VM and folder after completion
 					--build | -b				Option to enable testing a native build on the VM
-					--JDK-Version | -jdk			Specify which JDK to build, if build is specified
-					--build-repo | -br			Specify the openjdk-build repo to build with
+					--JDK-Version | -jdk <JDKVersion>	Specify which JDK to build, if build is specified
+					--build-repo | -br <GitURL>		Specify the openjdk-build repo to build with
+					--build-hotspot				Build the JDK with Hotspot (Default is OpenJ9)
 					--clean-workspace | -c			Will remove the old work folder if detected
 					--URL | -u <GitURL>			The URL of the git repository
                                         --test | -t                             Runs a quick test on the built JDK
@@ -101,6 +106,20 @@ checkVars()
                 echo "Can't find vagrant-rsync-back plugin, installing . . ."
                 vagrant plugin install vagrant-rsync-back
         fi
+	if [[ "$fastMode" == true ]]; then
+		skipFullSetup=",nvidia_cuda_toolkit"
+		case "$jdkToBuild" in
+			"jdk8" )
+				skipFullSetup="$skipFullSetup,MSVS_2017";
+				if [ "$buildHotspot" != "" ]; then
+					skipFullSetup="$skipFullSetup,MSVS_2010,VS2010_SP1"
+				fi
+				;;
+                	*)
+				skipFullSetup="$skipFullSetup,MSVS_2010,VS2010_SP1,MSVS_2013";;
+		esac
+	fi
+	jdkToBuild="--version $jdkToBuild"
 }
 
 checkVagrantOS()
@@ -189,9 +208,11 @@ startVMPlaybook()
 	# Copy the machine's ssh key for the VMs to use, after removing prior files
 	rm -f id_rsa.pub id_rsa
 	ssh-keygen -q -f $PWD/id_rsa -t rsa -N ''
-	vagrant up
-	# FreeBSD12 & SLES12 uses a different shared folder type- required to get hosts.tmp from VM
-	if [[ "$OS" == "FreeBSD12" || "$OS" == "SLES12" ]]; then
+	# The BUILD_ID variable is required to stop Jenkins shutting down the wrong VMS 
+	# See https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1287#issuecomment-625142917
+	BUILD_ID=dontKillMe vagrant up
+	# FreeBSD12 / Debian10 uses an rsync shared folder type- required to get hosts.tmp from VM
+	if [[ "$OS" == "FreeBSD12" || "$OS" == "Debian10" ]]; then
                vagrant rsync-back
 	fi
 	# Generate hosts.unx file for Ansible to use, remove prior hosts.unx if there
@@ -211,10 +232,10 @@ startVMPlaybook()
 	local pb_failed=$?
 	cd $WORKSPACE/adoptopenjdkPBTests/$folderName-$branchName/ansible
 	if [[ "$testNativeBuild" = true && "$pb_failed" == 0 ]]; then
-		ansible all -i playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx -u vagrant -m raw -a "cd /vagrant/pbTestScripts && ./buildJDK.sh $buildURL $jdkToBuild"
+		ssh -i $PWD/id_rsa vagrant@$vagrantIP "cd /vagrant/pbTestScripts && ./buildJDK.sh $buildURL $jdkToBuild $buildHotspot"
 		echo The build finished at : `date +%T`
 		if [[ "$runTest" = true ]]; then
-	        	ansible all -i playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx -u vagrant -m raw -a "cd /vagrant/pbTestScripts && ./testJDK.sh"
+	        	ssh -i $PWD/id_rsa vagrant@$vagrantIP "cd /vagrant/pbTestScripts && ./testJDK.sh"
 			echo The test finished at : `date +%T`
 		fi
 	fi
@@ -232,7 +253,9 @@ startVMPlaybookWin()
 	# Remove the Hosts files if they're found
 	rm -f playbooks/AdoptOpenJDK_Windows_Playbook/hosts.tmp
 	rm -f playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win
-	vagrant up
+	# The BUILD_ID variable is required to stop Jenkins shutting down the wrong VMS
+        # See https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1287#issuecomment-625142917
+	BUILD_ID=dontKillMe vagrant up
 	cat playbooks/AdoptOpenJDK_Windows_Playbook/hosts.tmp | tr -d \\r | sort -nr | head -1 > playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win
 	echo "This is the content of hosts.win : " && cat playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win
 	# Changes the value of "hosts" in main.yml
@@ -252,15 +275,16 @@ startVMPlaybookWin()
 	local pbFailed=$?
 	cd $WORKSPACE/adoptopenjdkPBTests/$folderName-$branchName/ansible
         if [[ "$testNativeBuild" = true && "$pbFailed" == 0 ]]; then
+		# Restarting the VM as the shared folder disappears after the playbook runs. (Possibly due to the restarts in the playbook)
+		vagrant halt && vagrant up
 		# Runs the build script via ansible, as vagrant powershell gives error messages that ansible doesn't. 
         	# See: https://github.com/AdoptOpenJDK/openjdk-infrastructure/pull/942#issuecomment-539946564
-		vagrant reload
-		ansible all -i playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win -u vagrant -m raw -a "Start-Process powershell.exe -Verb runAs; cd C:/; sh C:/vagrant/pbTestScripts/buildJDKWin.sh $buildURL $jdkToBuild"
+		python pbTestScripts/startScriptWin.py -i $(cat playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win) -a "$buildURL $jdkToBuild $buildHotspot" -b
 		echo The build finished at : `date +%T`
 		if [[ "$runTest" = true ]]; then
-			vagrant reload
+			vagrant halt && vagrant up
 			# Runs a script on the VM to test the built JDK
-			ansible all -i playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win -u vagrant -m raw -a "sh C:/vagrant/pbTestScripts/testJDKWin.sh"
+			python pbTestScripts/startScriptWin.py -i $(cat playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win) -t
 			echo The test finished at : `date +%T`
 		fi
 	fi
@@ -282,7 +306,26 @@ destroyVM()
 {
 	local OS=$1
 	echo "Destroying the $OS Machine"
-	vagrant global-status --prune | awk "/${folderName}-${branchName}/ { print \$1 }" | xargs vagrant destroy -f	
+	echo === `date +%T`: showing global status before pruning:
+	vagrant global-status
+	free
+	echo === showing global status while pruning:
+	vagrant global-status --prune
+	echo === Determining VM to destroy:
+	VM_TO_DESTROY=`vagrant global-status --prune | grep $OS | awk "/${folderName}-${branchName}/ { print \\$1 }"`
+	if [ ! -z "$VM_TO_DESTROY" ]; then
+	  echo === Destroying VM with id $VM_TO_DESTROY
+	  vagrant destroy -f $VM_TO_DESTROY
+	else
+	  echo === NOT DESTROYING ANY VM as no suitable ID was found searching for $OS and ${folderName}-${branchName}
+	fi
+        echo === Final status:
+        vagrant global-status
+        free
+        cd "$HOME/VirtualBox VMs"
+        rm -f "$WORKSPACE/virtualboxlogs.*.tar.xz"
+        tar cvJf "$WORKSPACE/virtualboxlogs.$OS.tar.xz" */Logs
+  
 }
 
 processArgs $*
@@ -300,7 +343,7 @@ do
 		startVMPlaybook $OS
 	fi
   	if [[ "$vmHalt" == true ]]; then
-                vagrant halt
+                vagrant halt 
 	fi
 	if [[ "$retainVM" == false ]]; then
 		destroyVM $OS

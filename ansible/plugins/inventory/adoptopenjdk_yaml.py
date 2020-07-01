@@ -42,12 +42,12 @@ valid = {
   'arch': ('armv7', 'armv8', 'ppc64le', 'ppc64', 'x64', 's390x'),
 
   # valid roles - add as necessary
-  'type': ('build', 'test', 'jck', 'infrastructure', 'perf'),
+  'type': ('build', 'test', 'infrastructure', 'perf', 'docker'),
 
   # providers - validated for consistency
   'provider': ('azure', 'marist', 'osuosl', 'scaleway',
-        'macstadium', 'macincloud', 'softlayer', 'packet', 'linaro',
-        'digitalocean', 'ibm', 'godaddy', 'aws')
+        'macstadium', 'macincloud', 'softlayer', 'spearhead',
+        'packet', 'linaro','digitalocean', 'ibm', 'godaddy', 'aws')
 }
 
 # customisation options per host:

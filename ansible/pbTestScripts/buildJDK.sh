@@ -37,7 +37,7 @@ usage() {
 	Options:
 		--version | -v		Specify the JDK version to build
 		--URL | -u		Specify the github URL to clone openjdk-build from
-		--openj9 | -j9		Builds openJ9, instead of hotspot
+		--hotspot | -hs		Builds hotspot, default is openj9
 		--clean-workspace | -c 	Removes old openjdk-build folder before cloning
 		--help | -h		Shows this message
 		
@@ -59,8 +59,8 @@ showJDKVersions() {
 }
 
 checkJDKVersion() {
-        local jdk=$1
-        case "$jdk" in
+	local jdk=$1
+	case "$jdk" in
                 "jdk8u" | "jdk8" | "8" | "8u" )
                         JAVA_TO_BUILD="jdk8u";;
                 "jdk9u" | "jdk9" | "9" | "9u" )
@@ -77,7 +77,32 @@ checkJDKVersion() {
                         JAVA_TO_BUILD="jdk14u";;
                 *)
                         echo "Not a valid JDK Version" ; showJDKVersions; exit 1;;
-        esac
+	esac
+	setBootJDK 
+}
+
+setBootJDK() {
+        local buildJDKNumber=$(echo ${JAVA_TO_BUILD//[!0-9]/})
+        local bootJDKNumber=$(($buildJDKNumber - 1));
+        # Refer to 8 as 'jdk8'. Anything else is 'jdk-XX'
+        [[ $bootJDKNumber != "8" ]] && bootJDKNumber="-$bootJDKNumber"
+        if [[ $buildJDKNumber -eq 8 ]]; then
+                # CentOS JDK7
+                export JDK_BOOT_DIR=$(find /usr/lib/jvm -maxdepth 1 -name java-1.7.0-openjdk.x86_64)
+                # Ubuntu JDK7
+                [[ -z "$JDK_BOOT_DIR" ]] && export JDK_BOOT_DIR=$(find /usr/lib/jvm/ -maxdepth 1 -name java-1.7.0-openjdk-\*)
+                # Zulu-7 for OSs without JDK7
+                [[ -z "$JDK_BOOT_DIR" ]] && export JDK_BOOT_DIR=$(find /usr/lib/jvm/ -maxdepth 1 -name zulu7)
+        else
+                export JDK_BOOT_DIR=/usr/lib/jvm/jdk${bootJDKNumber}
+        fi
+        # If JDK (jdkToBuild - 1) can't be found, look for equal boot and build jdk
+        if [ -z "${JDK_BOOT_DIR}" ]
+        then
+                [[ $buildJDKNumber != "8" ]] && buildJDKNumber="-$buildJDKNumber"
+                echo "Can't find jdk$bootJDKNumber to build JDK, looking for jdk$buildJDKNumber"
+                export JDK_BOOT_DIR=/usr/lib/jvm/jdk${buildJDKNumber}
+        fi
 }
 
 cloneRepo() {
@@ -120,21 +145,8 @@ if [[ ${unameOutput} != "x86_64" ]]; then
        export ARCHITECTURE=${unameOutput}
 fi
 
-# Differences in openJDK7 name between OSs. Search for CentOS one
-export JDK7_BOOT_DIR=$(find /usr/lib/jvm/ -name java-1.7.0-openjdk.x86_64)
-# If the CentOS JDK7 can't be found, search for the Ubuntu one
-[[ -z "$JDK7_BOOT_DIR" ]] && export JDK7_BOOT_DIR=$(find /usr/lib/jvm/ -name java-1.7.0-openjdk-\*)
-
-# Differences in openJDK8 name between Ubuntu and CentOS
-export JAVA_HOME=$(find /usr/lib/jvm/ -name java-1.8.0-openjdk-\*)
-if [ -z "$JAVA_HOME" ]; then
-	export JAVA_HOME=$(ls -1d /usr/lib/jvm/adoptopenjdk-8-* | head -1)
-fi
-
-if grep 'openSUSE' /etc/os-release >/dev/null 2>&1; then
-	echo "Running on openSUSE"
-	JAVA_HOME=$(find /usr/lib/jvm/ -name jdk8u*)
-fi	
+# Use the JDK8 installed with the adoptopenjdk_install role to run Gradle with.
+export JAVA_HOME=/usr/lib/jvm/jdk8
 
 # Only build Hotspot on FreeBSD
 if [[ $(uname) == "FreeBSD" ]]; then
@@ -146,12 +158,19 @@ if [[ $(uname) == "FreeBSD" ]]; then
         export JAVA_HOME=/usr/local/openjdk8
 fi
 
+# Required as Debian Buster doesn't have gcc-4.8 available
+# See https://github.com/AdoptOpenJDK/openjdk-infrastructure/pull/1321#discussion_r426625178
+if grep 'buster' /etc/*-release >/dev/null 2>&1; then
+	export CC=/usr/bin/gcc-7
+	export CXX=/usr/bin/g++-7
+fi
+
 echo "DEBUG:
         TARGET_OS=$TARGET_OS
         ARCHITECTURE=$ARCHITECTURE
         JAVA_TO_BUILD=$JAVA_TO_BUILD
         VARIANT=$VARIANT
-        JDK7_BOOT_DIR=$JDK7_BOOT_DIR
+        JDK_BOOT_DIR=$JDK_BOOT_DIR
         JAVA_HOME=$JAVA_HOME
         WORKSPACE=$WORKSPACE
         GIT_URL=$GIT_URL"

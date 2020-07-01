@@ -35,14 +35,14 @@
     - (ansible_distribution_major_version == "12" and ansible_architecture == "x86_64")
   tags: SUSE_gcc48
 
+# Skipping ansible lint as shell module is required to use the --force-resolution option (lint error 305)
 - name: Install gcc48
-  zypper:
-    name: gcc48
-    extra_args_precommand: "-non-interactive"
-    state: present
+  shell: zypper -n in --force-resolution gcc48
   when:
     - (ansible_distribution_major_version == "12" and ansible_architecture == "x86_64")
-  tags: patch_update
+  tags:
+    - patch_update
+    - skip_ansible_lint
 
 - name: zypper upgrade all packages
   zypper: name='*' state=latest update_cache=yes
@@ -70,50 +70,6 @@
   when:
     - ansible_architecture == "x86_64"
   tags: build_tools
-
-########
-# zlib #
-########
-- name: Check if zlib is already installed
-  stat:
-    path: /usr/local/lib/libz.so
-  register: zlib_status
-  tags: zlib
-
-- name: Download Zlib
-  get_url:
-    url: http://www.zlib.net/zlib-1.2.11.tar.gz
-    dest: /tmp/zlib-1.2.11.tar.gz
-    mode: 0440
-    checksum: sha256:c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1
-  when:
-    - zlib_status.stat.islnk is not defined
-  tags: zlib
-
-- name: Extract Zlib
-  unarchive:
-    src: /tmp/zlib-1.2.11.tar.gz
-    dest: /tmp
-    copy: False
-  when:
-    - zlib_status.stat.islnk is not defined
-  tags: zlib
-
-- name: Running ./configure & make for Zlib on Linux x86-64 or PPC64LE
-  shell: cd /tmp/zlib-1.2.11 && ./configure && make -j {{ ansible_processor_vcpus }} && make install
-  become: yes
-  when:
-    - ansible_architecture != "s390x"
-    - zlib_status.stat.islnk is not defined
-  tags: zlib
-
-- name: Running ./configure & make for Zlib on Linux s390x
-  shell: cd /tmp/zlib-1.2.11 && ./configure && make -j {{ ansible_processor_cores }} && make install
-  become: yes
-  when:
-    - ansible_architecture == "s390x"
-    - zlib_status.stat.islnk is not defined
-  tags: zlib
 
 #################
 # xorg Packages #
