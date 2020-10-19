@@ -11,7 +11,7 @@ Build_Tool_Packages:
   - build-essential
   - cpio
   - curl
-  - flex                          # Openj9
+  - flex                          # OpenJ9
   - g++
   - gcc
   - gettext
@@ -59,6 +59,10 @@ OpenJFX_Build_Tool_Packages:
   - libxxf86vm-dev
   - ruby
 
+gcc_7:                            # On all architectures but arm32
+  - g++-7                         # OpenJ9
+  - gcc-7                         # OpenJ9
+
 gcc_compiler:
   - g++-4.8
   - gcc-4.8
@@ -74,18 +78,12 @@ Additional_Packages_Debian8:
 Additional_Build_Tools_x86_64:
   - libnuma-dev
   - numactl
-  - gcc-7
-  - g++-7
 
 Additional_Build_Tools_ppc64le:
   - libnuma-dev
   - numactl
-  - gcc-7                         # OpenJ9
-  - g++-7                         # OpenJ9
 
 Additional_Build_Tools_s390x:
-  - gcc-7                         # OpenJ9
-  - g++-7                         # OpenJ9
   - numactl
   - libfreetype6-dev              # Needed by test state=installed
 

@@ -23,7 +23,7 @@
 
 - name: Download cmake
   get_url:
-    url: https://cmake.org/files/v3.11/cmake-{{ cmakeVersion }}.tar.gz
+    url: https://github.com/Kitware/CMake/releases/download/v3.11.4/cmake-{{ cmakeVersion }}.tar.gz
     dest: /tmp/cmake-{{ cmakeVersion }}.tar.gz
     mode: 0440
     force: no
@@ -31,7 +31,7 @@
     checksum: sha256:8f864e9f78917de3e1483e256270daabc4a321741592c5b36af028e72bff87f5
   when:
     - (cmake_installed.rc != 0 ) or (cmake_installed.rc == 0 and cmake_version.stdout is version_compare(cmakeVersion, operator='lt') )
-    - (ansible_architecture == "x86_64") or (ansible_architecture == "ppc64le") or (ansible_architecture == "s390x")
+    - ansible_architecture != "armv7l"
     - (ansible_distribution != "openSUSE")
   tags: cmake
 
@@ -42,16 +42,16 @@
     copy: False
   when:
     - (cmake_installed.rc != 0 ) or (cmake_installed.rc == 0 and cmake_version.stdout is version_compare(cmakeVersion, operator='lt') )
-    - (ansible_architecture == "x86_64") or (ansible_architecture == "ppc64le") or (ansible_architecture == "s390x")
+    - ansible_architecture != "armv7l"
     - (ansible_distribution != "openSUSE")
   tags: cmake
 
 # NOTE: PATH setting is for RHEL6/CentOS6 since gcc 4.4.7 is not C++11 compliant
 - name: Running ./configure & make for cmake
-  shell: cd /tmp/cmake-{{ cmakeVersion }} && ./configure && PATH=/opt/gcc-4.8.5/bin:$PATH make -j {{ ansible_processor_vcpus }} && make install
+  shell: cd /tmp/cmake-{{ cmakeVersion }} && PATH=/opt/gcc-4.8.5/bin:$PATH && ./configure && make -j {{ ansible_processor_vcpus }} && make install
   when:
     - (cmake_installed.rc != 0 ) or (cmake_installed.rc == 0 and cmake_version.stdout is version_compare(cmakeVersion, operator='lt') )
-    - (ansible_architecture == "x86_64") or (ansible_architecture == "ppc64le") or (ansible_architecture == "s390x")
+    - ansible_architecture != "armv7l"
     - (ansible_distribution != "openSUSE")
   tags: cmake
 
@@ -64,13 +64,3 @@
     - /tmp/cmake-{{ cmakeVersion }}.tar.gz
   ignore_errors: yes
   tags: cmake
-
-# cmake on armv7l
-- name: Install cmake on armv7l
-  apt: pkg=cmake state=latest update_cache=yes
-  when:
-    - ansible_architecture == "armv7l"
-  tags:
-    - cmake
-    # TODO: Package installs should not use latest
-    - skip_ansible_lint

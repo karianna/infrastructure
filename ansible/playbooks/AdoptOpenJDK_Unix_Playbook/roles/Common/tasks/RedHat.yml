@@ -17,12 +17,12 @@
   tags: patch_update
 
 
-- name: Enable EPEL release for RHEL8
+- name: Enable EPEL release for RHEL8 or RHEL6 or RHEL7
   yum: name=https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm
   ignore_errors: yes
   when:
     - ansible_architecture != "s390x"
-    - ansible_distribution_major_version == "8"
+    - (ansible_distribution_major_version == "8") or (ansible_distribution_major_version == "6") or (ansible_distribution_major_version == "7")
   tags: patch_update
 
 - name: YUM upgrade all packages
@@ -78,8 +78,7 @@
 - name: Install numactl-devel excluding RHEL 7 on s390x
   package: "name=numactl-devel state=latest"
   when:
-    - ! (ansible_os_family == "RedHat" and ansible_distribution_major_version == "7")
-    - ansible_architecture != "s390x"
+    - ! (ansible_distribution_major_version == "7" and ansible_architecture == "s390x")
   tags: build_tools
 
 - name: Install additional build tools for RHEL on x86
@@ -146,80 +145,61 @@
 ####################
 # Set default Java #
 ####################
-- name: Set default java version - RHEL 6 x86_64
+
+- name: Find Default JRE
+  stat:
+    path: /usr/lib/jvm/jre-1.8.0
+  register: jre_path
+  tags: default_java
+
+- name: Find Default JDK
+  stat:
+    path: /usr/lib/jvm/java-1.8.0
+  register: jdk_path
+  tags: default_java
+
+- name: Set Default JRE (RHEL 6)
   alternatives:
     name: java
-    path: /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java
+    path: "/usr/lib/jvm/jre-1.8.0-openjdk.{{ ansible_architecture }}/bin/java"
   when:
     - ansible_distribution_major_version == "6"
-    - ansible_architecture == "x86_64"
   tags: default_java
 
-- name: Set default java version - RHEL 7 x86_64
+- name: Set Default JRE (RHEL 7 and later)
   alternatives:
     name: java
-    path: java-1.8.0-openjdk.x86_64
+    path: "{{ jre_path.stat.lnk_source }}/bin/java"
   when:
-    - ansible_distribution_major_version == "7"
-    - ansible_architecture == "x86_64"
+    - ansible_distribution_major_version > "6"
   tags: default_java
 
-- name: Set default java version - RHEL 6 ppc64
+- name: Set Default JDK (RHEL 6)
   alternatives:
-    name: java
-    path: /usr/lib/jvm/jre-1.8.0-ibm.ppc64/bin/java
+    name: javac
+    path: "/usr/lib/jvm/java-1.8.0-openjdk.{{ ansible_architecture }}/bin/javac"
   when:
     - ansible_distribution_major_version == "6"
-    - ansible_architecture == "ppc64"
   tags: default_java
 
-- name: Set default java version - RHEL 7 ppc64
+- name: Set Default JDK (RHEL 7 and later)
   alternatives:
-    name: java
-    path: /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.161-0.b14.el7_4.ppc64/jre/bin/java
+    name: javac
+    path: "{{ jdk_path.stat.lnk_source }}/bin/javac"
   when:
-    - ansible_distribution_major_version == "7"
-    - ansible_architecture == "ppc64"
-  tags: default_java
-
-- name: Set default java version - RHEL 7 ppc64le
-  alternatives:
-    name: java
-    path: java-1.8.0-openjdk.ppc64le
-  when:
-    - ansible_distribution_major_version == "7"
-    - ansible_architecture == "ppc64le"
-  tags: default_java
-
-- name: Set default java version - RHEL 7 aarch64
-  alternatives:
-    name: java
-    path: java-1.8.0-openjdk.aarch64
-  when:
-    - ansible_distribution_major_version == "7"
-    - ansible_architecture == "aarch64"
-  tags: default_java
-
-- name: Set default java version - RHEL 7 s390x
-  alternatives:
-    name: java
-    path: java-1.8.0-openjdk.s390x
-  when:
-    - ansible_distribution_major_version == "7"
-    - ansible_architecture == "s390x"
-  tags: default_java
-
-- name: Set default java version - RHEL 8
-  alternatives:
-    name: java
-    path: java-1.8.0-openjdk.{{ ansible_architecture }}
-  when:
-    - ansible_distribution_major_version == "8"
+    - ansible_distribution_major_version > "6"
   tags: default_java
 
 ###########
 # Locales #
 ###########
+
+- name: Install 'locales' package
+  package:
+    name: locales
+    state: present
+  tags: locales
+
 # Skipping linting as no alternative to shell can be used (lint error 305)
 - name: Get locale list
   shell: locale -a

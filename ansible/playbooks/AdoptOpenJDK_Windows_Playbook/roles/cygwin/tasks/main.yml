@@ -1,11 +1,4 @@
 ---
-########################
-# Include OS variables #
-########################
-- name: Include OS variables
-  include_vars: "../vars/main.yml"
-  tags: main
-
 ##########
 # cygwin #
 ##########
@@ -15,88 +8,23 @@
   register: cygwin_installed
   tags: cygwin
 
-- name: Download Cygwin installer
+- name: Retrieve Cygwin setup
   win_get_url:
     url: https://cygwin.com/setup-x86_64.exe
-    dest: 'C:\temp\cygwin.exe'
-    force: no
-    checksum: 2431de4597a2162f3e1d60af90f638b41677265b07cc66fcb0231fdde452c841
-    checksum_algorithm: sha256
-  when: (not cygwin_installed.stat.exists)
+    dest: C:\temp\cygwin.exe
+  when: not cygwin_installed.stat.exists
   tags: cygwin
 
-- name: Install Cygwin and its packages
-  win_command: c:\temp\cygwin.exe --quiet-mode --download --local-install
-                --delete-orphans --site {{ Cygwin_SITE_URL }}
-                --local-package-dir {{ Cygwin_PACKAGE_DIR }}
-                --root {{ Cygwin_ROOT_INST_DIR }}
-                --categories {{ Cygwin_CATEGORIES }}
-  when: (not cygwin_installed.stat.exists)
-  tags: cygwin
-
-- name: Install Cygwin build extra packages
-  win_command: C:\temp\cygwin.exe -q -P "{{ item }}"
-  with_items:
-    - autoconf
-    - cpio
-    - libguile2.0_22            # Required for Make v4.2.1-2
-    - unzip
-    - zip
-  when: (not cygwin_installed.stat.exists)
-  tags: cygwin
-
-- name: Install Cygwin test extra packages
-  win_command: C:\temp\cygwin.exe -q -P "{{ item }}"
-  with_items:
-    - curl
-    - curl-debuginfo
-    - libcurl-devel
-    - libpng15
-    - libpng-devel
-    - perl-Text-CSV
-  when: (not cygwin_installed.stat.exists)
+- name: Install Cygwin
+  win_shell: |
+    Start-Process -Wait -FilePath 'C:\temp\cygwin.exe' -ArgumentList '--packages autoconf,automake,bsdtar,cpio,curl,gcc-core,git,gnupg,grep,libtool,make,mingw64-x86_64-gcc-core,perl,rsync,unzip,wget,zip --quiet-mode --download --local-install --delete-orphans --site https://mirrors.kernel.org/sourceware/cygwin/ --local-package-dir C:\cygwin_packages --root C:\cygwin64'
+  args:
+    executable: powershell
+  when: not cygwin_installed.stat.exists
   tags: cygwin
 
 - name: Change git config to not replace Line endings
   win_shell: "C:/cygwin64/bin/git config --system core.autocrlf false"
-  tags: cygwin
-
-###############################################################################
-# Cygwin by default installs latest versions of packages, which is 3.0-2 for
-# grep. This version of grep is unable to match EOL (with $) when the file use
-# windows style CRLF sequence at end of lines and it is required for openjdk8
-# builds to complete. The following two steps downloads the latest known
-# version of grep to satisfy this requirement and overwrites the installed
-# grep version.
-###############################################################################
-- name: Download grep-2.27-2
-  win_get_url:
-    url: "{{ Cygwin_SITE_URL + '/x86_64/release/grep/grep-2.27-2.tar.xz' }}"
-    dest: "{{ Cygwin_ROOT_INST_DIR + '\\tmp\\grep.tar.xz' }}"
-    force: no
-    checksum: 36ae2483f68b3c5a4bd93814fa4f7e2576dbe6559d4ffa0589c2159e85de91f6
-    checksum_algorithm: sha256
-  when: (not cygwin_installed.stat.exists)
-  tags: cygwin
-
-- name: Extract grep-2.27-2
-  win_command: "{{ Cygwin_ROOT_INST_DIR + '\\bin\\bash.exe -l -c \"tar -C / -xvf /tmp/grep.tar.xz\"' }}"
-  when: (not cygwin_installed.stat.exists)
-  tags: cygwin
-
-- name: Download make-4.2.1-2
-  win_get_url:
-    url: "{{ Cygwin_SITE_URL + '/x86_64/release/make/make-4.2.1-2.tar.xz' }}"
-    dest: "{{ Cygwin_ROOT_INST_DIR + '\\tmp\\make.tar.xz' }}"
-    force: no
-    checksum: 919037ac0ae0402639a08b474a60807499ae47b0aec98e7009820f9c05ea6515
-    checksum_algorithm: sha256
-  when: (not cygwin_installed.stat.exists)
-  tags: cygwin
-
-- name: Extract make-4.2.1-2
-  win_command: "{{ Cygwin_ROOT_INST_DIR + '\\bin\\bash.exe -l -c \"tar -C / -xvf /tmp/make.tar.xz\"' }}"
-  when: (not cygwin_installed.stat.exists)
   tags: cygwin
 
 - name: Remove c:\cygwin64\bin from the path if it exists
@@ -109,24 +37,13 @@
   when: (not cygwin_installed.stat.exists)
   tags: cygwin
 
-# NOTE: This construct is because an SQL Server entry is being added to
-# the path which has an erroneous quote in it which causes problems for SETX
-# See https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1401
-- name: Remove speech mark from the %PATH%
-  win_shell: 'setx /M PATH "%PATH:\"=%"'
+- name: Add C:\cygwin64\bin to the front of the path
+  win_shell: |
+    [Environment]::SetEnvironmentVariable("Path", "C:\cygwin64\bin;" + $env:Path, [System.EnvironmentVariableTarget]::Machine)
   args:
-    executable: cmd
+    executable: powershell
   when: (not cygwin_installed.stat.exists)
-  tags:
-    - cygwin
-
-- name: Add c:\cygwin64\bin to front of %PATH%
-  win_shell: 'setx /M PATH "C:\cygwin64\bin;%PATH%"'
-  args:
-    executable: cmd
-  when: (not cygwin_installed.stat.exists)
-  tags:
-    - cygwin
+  tags: cygwin
 
 - name: Reboot machine for PATH changes to take effect
   win_reboot:

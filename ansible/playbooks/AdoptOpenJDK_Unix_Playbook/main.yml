@@ -20,13 +20,19 @@
   #########
   roles:
     - Debug
+    - role: Get_Vendor_Files
+      tags: [vendor_files, adoptopenjdk]
     - Version
     - Common
+    - Providers                   # AdoptOpenJDK Infrastructure
     - autoconf
     - curl
     - Jenkins_User                # AdoptOpenJDK Infrastructure
     - role: freemarker            # OpenJ9
       tags: [build_tools, build_tools_openj9]
+    - role: macos_codesign
+      tags: [adoptopenjdk, codesign]
+      when: ansible_distribution == "MacOSX"
     - ant                         # Testing
     - Ant-Contrib                 # Testing
     - maven                       # Testing
@@ -51,18 +57,23 @@
     - zulu7                       # JDK8 Build Bootstrap
     - role: adoptopenjdk_install
       jdk_version: 8
+      when: ansible_distribution != "Alpine"
       tags: build_tools
     - role: adoptopenjdk_install  # JDK11 Build Bootstrap
       jdk_version: 10
+      when: ansible_distribution != "Alpine"
       tags: build_tools
     - role: adoptopenjdk_install
       jdk_version: 11
+      when: ansible_distribution != "Alpine"
       tags: build_tools
     - role: adoptopenjdk_install  # JDK14 Build Bootstrap
       jdk_version: 13
+      when: ansible_distribution != "Alpine"
       tags: build_tools
     - role: adoptopenjdk_install  # JDK15 Build Bootstrap
       jdk_version: 14
+      when: ansible_distribution != "Alpine"
       tags: build_tools
     - OpenSSL102                  # OpenJ9
     # - Nagios_Plugins              # AdoptOpenJDK Infrastructure

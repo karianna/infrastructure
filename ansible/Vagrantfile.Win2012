@@ -5,9 +5,10 @@
 $script = <<SCRIPT
 Start-Process powershell -Verb runAs
 wget https://raw.githubusercontent.com/ansible/ansible/devel/examples/scripts/ConfigureRemotingForAnsible.ps1 -OutFile .\\ConfigureRemotingForAnsible.ps1
+.\\ConfigureRemotingForAnsible.ps1 -CertValidityDays 9999
 .\\ConfigureRemotingForAnsible.ps1 -EnableCredSSP
-$IPArray=(Get-NetIPAddress -InterfaceAlias "Ethernet*" -AddressFamily ipv4 | select -ExpandProperty IPAddress)
-echo $IPArray | Out-file -Encoding ASCII -FilePath C:/vagrant/playbooks/AdoptOpenJDK_Windows_Playbook/hosts.tmp
+.\\ConfigureRemotingForAnsible.ps1 -ForceNewSSLCert
+.\\ConfigureRemotingForAnsible.ps1 -SkipNetworkProfileCheck
 # Retrieving disk's current size
 $currentDiskSize =(Get-Partition -DriveLetter c | select Size)
 $currentDiskSize =($currentDiskSize -replace "[^0-9]" , "")

@@ -48,9 +48,6 @@ hosts:
       - marist:
           rhel77-s390x-1: {ip: 148.100.86.102, user: linux1}
           rhel77-s390x-2: {ip: 148.100.245.197, user: linux1}
-          ubuntu1604-s390x-1: {ip: 148.100.113.58}
-          zOS-s390x-1: {ip: 148.100.36.136, user: OPEN1}
-          zOS-s390x-2: {ip: 148.100.36.137, user: OPEN1}
 
       - osuosl:
           aix71-ppc64-1: {ip: 140.211.9.10}
@@ -89,9 +86,6 @@ hosts:
 
       - packet:
           ubuntu1604-armv8-1: {ip: 147.75.77.146}
-
-      - osuosl:
-          ubuntu1604-ppc64le-1: {ip: 140.211.168.243}
 
       - scaleway:
           ubuntu1604-armv7-1: {ip: 51.158.73.136}
@@ -179,6 +173,10 @@ hosts:
           macos1014-x64-1: {ip: 87.237.62.57, user: admin}
           macos1014-x64-2: {ip: 92.63.134.40, user: admin}
           macos1014-x64-3: {ip: 74.80.249.207, user: admin}
+
+      - macstadium:
+          macos11-arm64-1: {ip: 199.7.163.51, user: Administrator}
+          macos11-arm64-2: {ip: 199.7.163.52, user: Administrator}
 
       - marist:
           sles12-s390x-1: {ip: 148.100.86.128}
