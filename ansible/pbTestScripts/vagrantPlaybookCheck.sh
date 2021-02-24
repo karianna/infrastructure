@@ -74,7 +74,7 @@ usage()
   --clean-workspace | -c         Remove the old work folder if detected
   --URL | -u <GitURL>            The URL of the git repository
   --test | -t                    Runs a quick test on the built JDK
-  --no-halt | -n                 Option to stop the vagrant VMs halting
+  --no-halt | -nh                Option to stop the vagrant VMs halting
   --new-vagrant-files | -nv      Use vagrantfiles from the the specified git repository
   --skip-more | -sm              Run playbook faster by excluding things not required by buildJDK
   --help | -h                    Displays this help message"
@@ -238,7 +238,7 @@ startVMPlaybook()
 	ssh-keygen -R $(cat playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx)
 	
 	sed -i -e "s/.*hosts:.*/- hosts: all/g" playbooks/AdoptOpenJDK_Unix_Playbook/main.yml
-	awk '{print}/^\[defaults\]$/{print "private_key_file = id_rsa"; print "timeout = 30"}' < ansible.cfg > ansible.cfg.tmp && mv ansible.cfg.tmp ansible.cfg
+	awk '{print}/^\[defaults\]$/{print "private_key_file = id_rsa"; print "remote_tmp = $HOME/.ansible/tmp"; print "timeout = 30"}' < ansible.cfg > ansible.cfg.tmp && mv ansible.cfg.tmp ansible.cfg
 	
 	ansible-playbook -i playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx -u vagrant -b --skip-tags adoptopenjdk,jenkins${skipFullSetup} playbooks/AdoptOpenJDK_Unix_Playbook/main.yml 2>&1 | tee $WORKSPACE/adoptopenjdkPBTests/logFiles/$folderName.$branchName.$OS.log
 	echo The playbook finished at : `date +%T`
