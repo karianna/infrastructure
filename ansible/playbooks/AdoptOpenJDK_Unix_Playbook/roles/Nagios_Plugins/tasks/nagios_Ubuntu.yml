@@ -3,12 +3,6 @@
 # AdoptOpenJDK - Ansible Playbook to install Nagios plugins on Ubuntu 14 and 16 on x86 hardware #
 #################################################################################################
 
-###########################################################################
-# License Information:                                                    #
-# Nagios core and its plugins are lincesed under GPL                      #
-# For more information please see: https://www.nagios.com/legal/licenses/ #
-###########################################################################
-
 ########################################
 # Install Nagios dependencies packages #
 ########################################
@@ -27,7 +21,7 @@
     state: latest
     update_cache: yes
     pkg: nagios-plugins-common
-  when: (ansible_distribution_version is version_compare('20', operator='ge'))
+  when: (not ansible_distribution_version is version_compare('20', operator='ge'))
 
 ##########
 # Layout #

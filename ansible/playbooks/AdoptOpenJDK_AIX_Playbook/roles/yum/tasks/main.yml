@@ -6,39 +6,79 @@
 - name: Confirm yum is installed - /usr/bin/yum
   stat:
     path: /usr/bin/yum
-  register: yum
+  register: _yum
+  tags: yum
 
 # Use set -o pipefail -o to quiet AnsibleLint
 - name: Uninstall conflicting packages
   shell: set -o pipefail | rpm -e --nodeps $(rpm -qa | grep -E "cloud-init|perl|openssl") 2>/dev/null
   ignore_errors: True
-  when: yum.stat.islnk is not defined
+  when: _yum.stat.islnk is not defined
   tags:
+    - yum
     - rpm_remove
     # TODO: rpm used in place of yum or rpm_key module
     - skip_ansible_lint
 
 ####################################
 # Install yum and update to latest #
+# Previous version of this downloaded and executed
+#   url: ftp://public.dhe.ibm.com/aix/freeSoftware/aixtoolbox/ezinstall/ppc/yum.sh
+# These steps below do the same (update rpm.rte, install initial RPM bundle)
+# but require a alturnative python to be installed
+# eg, http://download.aixtools.net/tools/aixtools.python.py36.3.6.12.0.I
+# and ansible.cfg needs 'ansible_python_interpreter = /opt/bin/python3.6'
 ####################################
-- name: Download yum.sh
-  get_url:
-    url: ftp://public.dhe.ibm.com/aix/freeSoftware/aixtoolbox/ezinstall/ppc/yum.sh
-    validate_certs: False
-    dest: /tmp/
-    mode: 0775
-    timeout: 25
-  when: yum.stat.islnk is not defined
-  tags: yum
+- name: Install yum from AIXToolbox
+  block:
+    - name: Ensure dest exists
+      file:
+        state: directory
+        path: /tmp/yum
 
-- name: Install yum and dependencies
-  command: /tmp/yum.sh
-  ignore_errors: yes
-  when: yum.stat.islnk is not defined
+    - name: Transfer rpm.rte
+      get_url:
+        url: ftp://public.dhe.ibm.com/aix/freeSoftware/aixtoolbox/INSTALLP/ppc/rpm.rte
+        mode: 0644
+        validate_certs: false
+        dest: /tmp/yum
+
+    - name: Install/update rpm.rte
+      command: installp -aYgd /tmp/yum/rpm.rte rpm.rte
+
+    - name: Transfer yum bundle package
+      get_url:
+        url: ftp://public.dhe.ibm.com/aix/freeSoftware/aixtoolbox/ezinstall/ppc/yum_bundle.tar
+        mode: 0644
+        validate_certs: false
+        dest: /tmp/yum
+
+    - name: Unpack yum bundle
+      command: tar -xf /tmp/yum/yum_bundle.tar -C /tmp/yum
+
+    - name: Install yum bundle
+      command: rpm -i /tmp/yum/*.rpm
+
+    - name: Cleanup /tmp/yum
+      file:
+        state: absent
+        path: /tmp/yum
+  when: _yum.stat.islnk is not defined
   tags:
     - yum
-    #TODO: Package installs should not use latest
-    - skip_ansible_lint
+    - vendor_files
+
+- name: Ensure AIX_Toolbox repo is enabled
+  shell: yum-config-manager --enable AIX_Toolbox
+  tags: yum
+
+- name: Ensure AIX_Toolbox_noarch repo is enabled
+  shell: yum-config-manager --enable AIX_Toolbox_noarch
+  tags: yum
+
+- name: Ensure AIX_Toolbox_71 repo is enabled
+  shell: yum-config-manager --enable AIX_Toolbox_71
+  tags: yum
 
 - name: Yum update
   yum:
@@ -55,7 +95,7 @@
   yum: name={{ item }} state=present update_cache=yes
   with_items:
     - bash
-    - autoconf
+    - autoconf-2.69-1
     - bc
     - bison
     - coreutils
@@ -64,12 +104,11 @@
     - cups-libs
     - expect
     - flex
-    - freetype2-devel
+    - freetype2-devel-2.8-1
     - fontconfig-devel
     - gawk
     - git
     - grep
-    - libXrender-devel
     - libffi-devel
     - make
     - m4
@@ -80,13 +119,32 @@
     - sudo
     - tar
     - tcl
-    - tk
     - unzip
     - wget
     - xz-libs
     - zip
     - zsh
   tags: yum
+
+- name: Remove packages - in case installed historically, or by accident
+  yum: name={{ item }} state=absent
+  with_items:
+    - libXrender-devel
+    - libXrender
+    - libXft
+    - tk
+    - renderproto
+  tags:
+    - yum
+    - adoptopenjdk
+
+- name: Remove, if exists, reference to libXrender-devel include files
+  file:
+    state: absent
+    path: /opt/freeware/include/X11/extensions
+  tags:
+    - yum
+    - adoptopenjdk
 
 #######################################################
 # Additional Tools not available directly through yum #
@@ -124,7 +182,7 @@
     - rpm_install
     - yum
 
-# Create zlib.h and zconf.h links - See https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1952
+# Create zlib.h and zconf.h links - See https://github.com/adoptium/infrastructure/issues/1952
 
 - name: Checking for /opt/freeware/include/zlib.h
   stat:
@@ -152,4 +210,12 @@
     dest: /usr/include/zconf.h
     state: link
   when: zconf.stat.exists
+  tags: yum
+
+- name: Exclude packages from updating
+  lineinfile:
+    dest: /opt/freeware/etc/yum/yum.conf
+    firstmatch: yes
+    insertafter: 'plugins=1'
+    line: 'exclude=freetype2* autoconf'
   tags: yum

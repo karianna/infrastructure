@@ -18,6 +18,7 @@ jdkToBuild=''
 buildHotspot=''
 testDocker=false
 scriptPath=$(realpath $0)
+verbosity=''
 
 # Takes all arguments from the script, and determines options
 processArgs()
@@ -58,6 +59,8 @@ processArgs()
 				buildHotspot="--hotspot";;
 			"--test-docker" )
 				testDocker=true;;
+			"-V" | "-VV" | "-VVV" | "-VVVV" )
+				verbosity=$(echo $opt | tr '[:upper:]' '[:lower:]');;
 			"--help" | "-h" )
 				usage; exit 0;;
 			*) echo >&2 "Invalid option: ${opt}"; echo "This option was unrecognised."; usage; exit 1;;
@@ -83,21 +86,22 @@ usage()
   --no-halt | -nh                Option to stop the vagrant VMs halting
   --new-vagrant-files | -nv      Use vagrantfiles from the the specified git repository
   --skip-more | -sm              Run playbook faster by excluding things not required by buildJDK
-  --help | -h                    Displays this help message"
+  --help | -h                    Displays this help message
+  -V                             Apply verbose option to 'ansible-playbook', up to '-VVVV'"
 }
 
 checkVars()
 {
 	if [ "$vagrantOS" == "" ]; then
-                usage
+		usage
 		echo "ERROR: No Vagrant OS specified - Use -h for help, -a for all or -v with one of the following:"
-		ls -1 ../Vagrantfile.* | cut -d. -f4
-                exit 1
+		ls -1 ../vagrant/Vagrantfile.* | cut -d. -f4
+		exit 1
 	fi
 	if [[ "$runTest" == true && "$testNativeBuild" == false ]]; then 
-                echo "Unable to test an unbuilt JDK. Please specify both '--build' and '--test'"
-                exit 1
-        fi
+		echo "Unable to test an unbuilt JDK. Ignoring '--test' argument."
+		runTest=false
+	fi
 	#Sets WORKSPACE to home if WORKSPACE is empty or undefined. 
 	if [ ! -n "${WORKSPACE:-}" ]; then
 		echo "WORKSPACE not found, setting it as environment variable 'HOME'"
@@ -143,9 +147,9 @@ checkVagrantOS()
 {
         local vagrantOSList
         if [[ "$newVagrantFiles" = "true" ]]; then
-                cd ${WORKSPACE}/adoptopenjdkPBTests/${gitFork}-${gitBranch}/ansible
+                cd ${WORKSPACE}/adoptopenjdkPBTests/${gitFork}-${gitBranch}/ansible/vagrant
         else    
-                cd ${scriptPath%/*}/..
+                cd ${scriptPath%/*}/../vagrant
         fi
         vagrantOSList=$(ls -1 Vagrantfile.* | cut -d. -f 2)
         if [[ -f "Vagrantfile.${vagrantOS}" ]]; then
@@ -158,11 +162,16 @@ checkVagrantOS()
                 exit 1
         fi
         # The Windows VM is setup to use 5GB of memory, which can be an issue on machines with only 8GB installed.
-        # See: https://github.com/AdoptOpenJDK/openjdk-infrastructure/pull/1532#issue-481189847
+        # See: https://github.com/adoptium/infrastructure/pull/1532#issue-481189847
         if [[ "$vagrantOS" == "Win2012" && $(free | awk '/Mem:/ { print $2 }') -lt 8000000 ]]; then
                 echo "Warning: Windows VM requires 5Gb of free memory to run. On laptops with only 8Gb this can be an issue."
                 echo "Reducing the Windows VM memory requirement to 2560Mb."
                 sed -i -e "s/5120/2560/g" Vagrantfile.Win2012
+        fi
+        if [[ "$vagrantOS" == "Win2016" && $(free | awk '/Mem:/ { print $2 }') -lt 8000000 ]]; then
+                echo "Warning: Windows VM requires 5Gb of free memory to run. On laptops with only 8Gb this can be an issue."
+                echo "Reducing the Windows VM memory requirement to 2560Mb."
+                sed -i -e "s/5120/2560/g" Vagrantfile.Win2016
         fi
 }
 
@@ -172,6 +181,18 @@ setupWorkspace()
 	local gitDirectory=${workFolder}/${gitFork}-${gitBranch}
 	mkdir -p ${workFolder}/logFiles
 
+	local isRepoInfra=$(curl https://api.github.com/repos/$gitFork/infrastructure | grep "Not Found")
+	local isRepoOpenjdk=$(curl https://api.github.com/repos/$gitFork/openjdk-infrastructure | grep "Not Found")
+
+	if [[ -z "$isRepoInfra" ]]; then
+		gitRepo="https://github.com/${gitFork}/infrastructure"
+	elif [[ -z "$isRepoOpenjdk" ]]; then
+		gitRepo="https://github.com/${gitFork}/openjdk-infrastructure"
+	else
+		echo "Repository not found - the fork must be named openjdk-infrastructure or infrastructure"
+		exit 1
+	fi
+
 	if [[ "$cleanWorkspace" = true && -d ${gitDirectory} ]]; then
 		echo "Cleaning old workspace"
 		rm -rf ${gitDirectory}
@@ -180,7 +201,7 @@ setupWorkspace()
 	fi
 
 	if [ ! -d "${gitDirectory}" ]; then
-		git clone -b ${gitBranch} --single-branch https://github.com/${gitFork}/openjdk-infrastructure ${gitDirectory}
+		git clone -b ${gitBranch} --single-branch ${gitRepo} ${gitDirectory}
 	else
 		cd ${gitDirectory}
 		git pull
@@ -193,18 +214,20 @@ startVMPlaybook()
 	local OS=$1
 	local vagrantPORT=""
 	local pbLogPath="$WORKSPACE/adoptopenjdkPBTests/logFiles/${gitFork}.${gitBranch}.$OS.log"
+	local ssh_args=""
 
 	cd $WORKSPACE/adoptopenjdkPBTests/${gitFork}-${gitBranch}/ansible
 	if [ "$newVagrantFiles" = "true" ]; then
-	  ln -sf Vagrantfile.$OS Vagrantfile
+	  ln -sf vagrant/Vagrantfile.$OS Vagrantfile
 	else
-	  ln -sf ${scriptPath%/*}/../Vagrantfile.$OS Vagrantfile
+	  ln -sf ${scriptPath%/*}/../vagrant/Vagrantfile.$OS Vagrantfile
 	fi
 	# Copy the machine's ssh key for the VMs to use, after removing prior files
 	rm -f id_rsa.pub id_rsa
 	ssh-keygen -q -f $PWD/id_rsa -t rsa -N ''
+
 	# The BUILD_ID variable is required to stop Jenkins shutting down the wrong VMS 
-	# See https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1287#issuecomment-625142917
+	# See https://github.com/adoptium/infrastructure/issues/1287#issuecomment-625142917
 	BUILD_ID=dontKillMe vagrant up
 	vagrantPORT=$(vagrant port | grep host | awk '{ print $4 }')
 
@@ -216,18 +239,26 @@ startVMPlaybook()
 	ssh-keygen -R $(cat playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx)
 	
 	sed -i -e "s/.*hosts:.*/- hosts: all/g" playbooks/AdoptOpenJDK_Unix_Playbook/main.yml
-	awk '{print}/^\[defaults\]$/{print "private_key_file = id_rsa"; print "remote_tmp = $HOME/.ansible/tmp"; print "timeout = 30"}' < ansible.cfg > ansible.cfg.tmp && mv ansible.cfg.tmp ansible.cfg
+	awk '{print}/^\[defaults\]$/{print "private_key_file = id_rsa"; print "remote_tmp = $HOME/.ansible/tmp"; print "timeout = 60"}' < ansible.cfg > ansible.cfg.tmp && mv ansible.cfg.tmp ansible.cfg
 	
-	ansible-playbook -i playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx -u vagrant -b --skip-tags adoptopenjdk,jenkins${skipFullSetup} playbooks/AdoptOpenJDK_Unix_Playbook/main.yml 2>&1 | tee $WORKSPACE/adoptopenjdkPBTests/logFiles/$gitFork.$gitBranch.$OS.log
+	ansible-playbook $verbosity -i playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx -u vagrant -b --skip-tags adoptopenjdk,jenkins${skipFullSetup} playbooks/AdoptOpenJDK_Unix_Playbook/main.yml 2>&1 | tee $WORKSPACE/adoptopenjdkPBTests/logFiles/$gitFork.$gitBranch.$OS.log
 	echo The playbook finished at : `date +%T`
 	if ! grep -q 'unreachable=0.*failed=0' $pbLogPath; then
 		echo PLAYBOOK FAILED 
 		exit 1
 	fi
 
+	if [ "$OS" == "Solaris10" ]; then
+		# Remove IP from known_hosts as the playbook installs an
+		# alternate sshd which regenerates the host key infra#2244
+		ssh-keygen -R $(cat playbooks/AdoptOpenJDK_Unix_Playbook/hosts.unx)
+		ssh_args="$ssh_args -o StrictHostKeyChecking=no"
+	fi
+
 	if [[ "$testNativeBuild" = true ]]; then
 		local buildLogPath="$WORKSPACE/adoptopenjdkPBTests/logFiles/${gitFork}.${gitBranch}.$OS.build_log"
-		ssh -p ${vagrantPORT} -i $PWD/id_rsa vagrant@127.0.0.1 "cd /vagrant/pbTestScripts && ./buildJDK.sh $buildBranch $buildFork $jdkToBuild $buildHotspot" 2>&1 | tee $buildLogPath
+
+		ssh -p ${vagrantPORT} $ssh_args -i $PWD/id_rsa vagrant@127.0.0.1 "cd /vagrant/pbTestScripts && bash buildJDK.sh $buildBranch $buildFork $jdkToBuild $buildHotspot" 2>&1 | tee $buildLogPath
 		echo The build finished at : `date +%T`
 		if grep -q '] Error' $buildLogPath || grep -q 'configure: error' $buildLogPath; then
 			echo BUILD FAILED
@@ -236,7 +267,7 @@ startVMPlaybook()
 
 		if [[ "$runTest" = true ]]; then
 			local testLogPath="$WORKSPACE/adoptopenjdkPBTests/logFiles/${gitFork}.${gitBranch}.$OS.test_log"
-			ssh -p ${vagrantPORT} -i $PWD/id_rsa vagrant@127.0.0.1 "cd /vagrant/pbTestScripts && ./testJDK.sh" 2>&1 | tee $testLogPath
+			ssh -p ${vagrantPORT} $ssh_args -i $PWD/id_rsa vagrant@127.0.0.1 "cd /vagrant/pbTestScripts && bash testJDK.sh" 2>&1 | tee $testLogPath
 			echo The test finished at : `date +%T`
 			if ! grep -q 'FAILED: 0' $testLogPath; then
 				echo TEST FAILED
@@ -267,19 +298,24 @@ startVMPlaybookWin()
 
 	cd $WORKSPACE/adoptopenjdkPBTests/${gitFork}-${gitBranch}/ansible
 	if [ "$newVagrantFiles" = "true" ]; then
-	  ln -sf Vagrantfile.$OS Vagrantfile
+	  ln -sf vagrant/Vagrantfile.$OS Vagrantfile
 	else
-	  ln -sf ${scriptPath%/*}/../Vagrantfile.$OS Vagrantfile
+	  ln -sf ${scriptPath%/*}/../vagrant/Vagrantfile.$OS Vagrantfile
 	fi
 
 	# Remove the Hosts files if they're found
 	rm -f playbooks/AdoptOpenJDK_Windows_Playbook/hosts.*
 	# The BUILD_ID variable is required to stop Jenkins shutting down the wrong VMS
-        # See https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1287#issuecomment-625142917
+        # See https://github.com/adoptium/infrastructure/issues/1287#issuecomment-625142917
 	BUILD_ID=dontKillMe vagrant up
 	
+	# Rearm the evaluation license for 180 days to stop the VMs shutting down
+	# See: https://github.com/adoptium/infrastructure/issues/2056
+	vagrant winrm --shell cmd -c "slmgr.vbs /rearm //b"
+	vagrant reload
+
 	# 5986 refers to the winrm_ssl port on the guest
-	# See: https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1504#issuecomment-672930832
+	# See: https://github.com/adoptium/infrastructure/issues/1504#issuecomment-672930832
 	vagrantPort=$(vagrant port |  awk '/5986/ { print $4 }')
 	echo "[127.0.0.1]:$vagrantPort" >> playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win
 	echo "This is the content of hosts.win : " && cat playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win
@@ -296,7 +332,7 @@ startVMPlaybookWin()
 	fi
 	
 	# Run the ansible playbook on the VM & logs the output.
-	ansible-playbook -i playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win -u vagrant --skip-tags jenkins,adoptopenjdk${skipFullSetup} playbooks/AdoptOpenJDK_Windows_Playbook/main.yml 2>&1 | tee $pbLogPath
+	ansible-playbook $verbosity -i playbooks/AdoptOpenJDK_Windows_Playbook/hosts.win -u vagrant --skip-tags jenkins,adoptopenjdk${skipFullSetup} playbooks/AdoptOpenJDK_Windows_Playbook/main.yml 2>&1 | tee $pbLogPath
 	echo The playbook finished at : `date +%T`
 	if ! grep -q 'unreachable=0.*failed=0' $pbLogPath; then
 		echo PLAYBOOK FAILED 
@@ -309,15 +345,12 @@ startVMPlaybookWin()
 		# Restarting the VM as the shared folder disappears after the playbook runs due to the restarts in the playbook
 		vagrant halt && vagrant up
 
-		# Restaring the VM may change the port Number
-                vagrantPort=$(vagrant port |  awk '/5986/ { print $4 }')
-                # The port used by startScriptWin.sh must be the winRM port, not the winRM_ssl port
-                # See: https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1504#issuecomment-673329953
-                local winRMPort=$(( vagrantPort -1 ))
+		# Restarting the VM may change the port number
+		vagrantPort=$(vagrant port |  awk '/5985/ { print $4 }')
 
 		# Run a python script to start the build on the Windows VM to give live stdout/stderr
-		# See: https://github.com/AdoptOpenJDK/openjdk-infrastructure/issues/1296
-		python pbTestScripts/startScriptWin.py -i "127.0.0.1:$winRMPort" -a "$buildFork $buildBranch $jdkToBuild $buildHotspot" -b 2>&1 | tee $buildLogPath
+		# See: https://github.com/adoptium/infrastructure/issues/1296
+		python pbTestScripts/startScriptWin.py -i "127.0.0.1:$vagrantPort" -a "$buildFork $buildBranch $jdkToBuild $buildHotspot" -b 2>&1 | tee $buildLogPath
 		echo The build finished at : `date +%T`
 		if grep -q '] Error' $buildLogPath || grep -q 'configure: error' $buildLogPath; then
 			echo BUILD FAILED
@@ -328,7 +361,7 @@ startVMPlaybookWin()
 			local testLogPath="$WORKSPACE/adoptopenjdkPBTests/logFiles/${gitFork}.${gitBranch}.$OS.test_log"
 			
 			# Run a python script to start a test for the built JDK on the Windows VM
-			python pbTestScripts/startScriptWin.py -i "127.0.0.1:$winRMPort" -t 2>&1 | tee $testLogPath
+			python pbTestScripts/startScriptWin.py -i "127.0.0.1:$vagrantPort" -t 2>&1 | tee $testLogPath
 			echo The test finished at : `date +%T`
 			if ! grep -q 'FAILED: 0' $testLogPath; then 
 				echo TEST FAILED
@@ -368,7 +401,7 @@ checkVagrantOS
 echo "Testing on the following OSs: $vagrantOS"
 for OS in $vagrantOS
 do
-	if [[ "$OS" == "Win2012" ]]; then
+	if [[ "$OS" == "Win2012" ]] || [[ "$OS" == "Win2016" ]]; then
 		startVMPlaybookWin $OS
 	else
 		startVMPlaybook $OS

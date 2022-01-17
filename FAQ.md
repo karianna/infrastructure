@@ -9,22 +9,6 @@ won't necessarily have access to see these links):
 - [infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure) - higher level of access for system administrators only
 - [admin_infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/admin_infrastructure) - The Admin team - can force through changes without approval etc.
 
-## Commit messages
-
-Wherever possible, prefix the commit message with the area which you are
-changing e.g.
-
-- unixPB:
-- winPB:
-- aixPB:
-- ansible:
-- vagrant:
-- pbTests:
-- docs:
-- plugins:
-- inventory:
-- github:
-
 ## Change approvals
 
 All changes to the repository should be made via GitHub pull requests.
@@ -77,6 +61,28 @@ ssh-add
 and if using the `-b` option, ensure that your user has access to `sudo`
 without a password to the `root` account (often done by adding it to the `wheel` group)
 
+## What about the builds that use the `dockerBuild` tag?
+
+In addition to the static build machines which we have, there are also
+Dockerfiles that are used to build the base images that our build farm uses
+for running docker based builds on some of our platforms - this is what we
+have at the moment:
+
+| Dockerfile | Image | Platforms  | Where is this built? | In use?
+|---|---|---|---|---|
+| [Centos7](./ansible/docker/Dockerfile.CentOS7) | [`adoptopenjdk/centos7_build_image`](https://hub.docker.com/r/adoptopenjdk/centos7_build_image) | linux on x64, arm64, ppc64le, armv7l | [Jenkins](https://ci.adoptopenjdk.net/job/centos7_docker_image_updater/) | Yes
+| [Centos6](./ansible/docker/Dockerfile.CentOS6) | [`adoptopenjdk/centos6_build_image`](https://hub.docker.com/r/adoptopenjdk/centos6_build_image)| linux/amd64 | [GH Actions](.github/workflows/build.yml) | Yes
+| [Alpine3](./ansible/docker/Dockerfile.Alpine3) | [`adoptopenjdk/alpine3_build_image`](https://hub.docker.com/r/adoptopenjdk/alpine3_build_image) | linux/amd64 | [GH Actions](.github/workflows/build.yml) | Yes
+| [Windows2016_Base](./ansible/docker/Dockerfile.Windows2016_Base) | [`adoptopenjdk/windows2016_build_image:base`](https://hub.docker.com/r/adoptopenjdk/windows2016_build_image)| windows/amd64 | [GH Actions](.github/workflows/build_windows.yml) | No
+| [Windows2016_VS2017](./ansible/docker/Dockerfile.Windows2016_VS2017) | [`adoptopenjdk/windows2016_build_image:vs2017`](https://hub.docker.com/r/adoptopenjdk/windows2016_build_image)| windows/amd64 | [GH Actions](.github/workflows/build_windows.yml) | No
+
+When a change lands into master, the relevant dockerfiles are built using
+the appropriate CI system listed in the table above by configuring them with
+the ansible playbooks and pushing them up to Docker Hub where they can be
+consumed by our jenkins build agents when the `DOCKER_IMAGE` value is
+defined on the jenkins build pipelines as configured in the
+[pipeline_config files](https://github.com/AdoptOpenJDK/ci-jenkins-pipelines/tree/master/pipelines/jobs/configurations).
+
 ## Adding a new role to the ansible scripts
 
 Other than the dependencies on the machines which come from packages shipped
@@ -99,8 +105,90 @@ occasionally required if, for example, we need a specific version of a tool
 on the machine that is later than the default, and want to ensure that the
 old version does not get invoked by default on the adoptopenjdk machines.
 See
-[GIT_Source](https://github.com/AdoptOpenJDK/openjdk-infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/roles/GIT_Source/tasks/main.yml)
+[GIT_Source](https://github.com/adoptium/infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/roles/GIT_Source/tasks/main.yml)
 as an example
+
+## How do I replicate a build failure?
+
+The build triage team will frequently raise issues if they determine that a
+build failure is occurring on a particular system. Assuming it's not a
+"system is offline" issue you may wish to repliacte the build process
+locally. The easiest way to do this is as follows (ideally not as root as
+that can mask problems).
+```
+git clone https://github.com/adoptopenjdk/openjdk-build
+cd openjdk-build/build-farm
+export CONFIGURE_ARGS=--with-native-debug-symbols=none
+export BUILD_ARGS="--custom-cacerts false"
+./make-adopt-build-farm.sh jdk11u
+```
+
+(NOTE: `jdk11u` is the default if nothing is specified)
+
+The two `export` lines are based on the options in the
+[Build FAQ](https://github.com/AdoptOpenJDK/ci-jenkins-pipelines/blob/quickbuild/FAQ.md#how-do-i-build-more-quickly)
+and speed up the process by not building the debug
+symbols and not generating our own certificate bundles.  For most problems,
+neither are needed Look at the start of the script for other environment
+variables that can be set control what is built - for example `VARIANT` can
+be set to `openj9` and others instead of the default of `hotspot`.  The
+script uses the appropriate environment configuration files under
+`build-form/platform-specific-configurations` to set some options.
+
+## How do I replicate a test failure
+
+Many infrastructure issues (generally
+[those tagged as testFail](https://github.com/adoptium/infrastructure/issues?q=is%3Aopen+is%3Aissue+label%3AtestFail) are raised
+as the result of failing JDK tests which are believed to be problems
+relating to the set up of our machines.  In most cases it is useful to
+re-run jobs using the jenkins
+[Grinder](https://github.com/AdoptOpenJDK/openjdk-tests/wiki/How-to-Run-a-Grinder-Build-on-Jenkins)
+jobs which lets you run almost any test on any machine which is connected to
+jenkins.  In most cases `testFail` issues will have a link to the jenkins
+job where the failure occurred.  On that job there will be a "Rerun in
+Grinder" link if you need to re-run the whole job (which will run lots of
+tests and may take a while) or within the job you will find individual
+Grinder re-run links for different test subsets.  When you click them, you
+can set the `LABEL` to the name of the machine you want to run on if you
+want to try and replicate it, or determine which machines it passes and
+fails on.
+
+For more information on test case diagnosis, there is a full
+[Triage guide](https://github.com/AdoptOpenJDK/openjdk-tests/blob/master/doc/Triage.md)
+in the openjdk-tests repository
+
+The values for `TARGET` can be found in thte `<testCaseName>` elements of
+.the various `playlist.xml` files in the test repositories. It can also be
+`jdk_custom` which case you should set the `CUSTOM_TARGET` to the name of
+an individual test for example:
+`test/jdk/java/lang/invoke/lambda/LambdaFileEncodingSerialization.java`
+
+If you then need to run manually on the machine itself (outside jenkins)
+then the process is typically like this:
+
+```
+git clone https://github.com/adoptopenjdk/openjdk-tests && cd openjdk-tests
+./get.sh && cd TKG
+export TEST_JDK_HOME=<path to JDK which you want to use for the tests>
+BUILD_LIST=openjdk make compile
+make <target>
+```
+`BUILD_LIST` depends on the suite you want to run, and can be omitted to build
+the tests for everything, but that make take a while and requires `docker`
+to be available.  Note that when building the `system` suite, there must be
+a java in the path to build the mauve tests.  The final make command runs
+the test - it is normally a valid Grinder `TARGET` such as `jdk_net`. There
+is more information on running tests yourself in the
+[tests repository](https://github.com/AdoptOpenJDK/openjdk-tests/blob/master/doc/userGuide.md#local-testing-via-make-targets-on-the-commandline)
+
+A few examples that test specific pieces of infra-related functionality so useful to be aware of:
+- `BUILD_LIST=functional`, `CUSTOM_TARGET=_MBCS_Tests_pref_ja_JP_linux_0`
+- `BUILD_LIST=system`, `CUSTOM_TARGET=_MachineInfo`
+- `BUILD_LIST=openjdk`, `CUSTOM_TARGET=test/jdk/java/lang/invoke/lambda/LambdaFileEncodingSerialization.java` (`en_US.utf8` locale required)
+- `BUILD_LIST=system`, `TARGET=system.custom` `CUSTOM_TARGET=-test=MixedLoadTest -test-args="timeLimit=5m"` (`system_custom` was added in https://github.com/AdoptOpenJDK/openjdk-tests/pull/2234)
+
+(For the last one, that makes use of the system.custom target added via
+[this PR](https://github.com/AdoptOpenJDK/openjdk-tests/pull/2234))
 
 ## Testing changes
 
@@ -110,7 +198,7 @@ playbooks on other platforms, be sure to run it through the
 job first. This job takes a branch from a fork of the
 `openjdk-infrastructure` repository as a parameter and runs the playbooks
 against a variety of Operating Systems using Vagrant and the scripts in
-[pbTestScripts](https://github.com/AdoptOpenJDK/openjdk-infrastructure/tree/master/ansible/pbTestScripts)
+[pbTestScripts](https://github.com/adoptium/infrastructure/tree/master/ansible/pbTestScripts)
 to validate them.
 
 ## Jenkins access
@@ -141,13 +229,79 @@ To add a new system:
 1. Ensure there is an issue documenting its creation somewhere (Can just be an existing issue that you add the hostname too so it can be found later
 2. Obtain system from the appropriate infrastructure provider
 3. Add it to bastillion (requires extra privileges) so that all of the appropriate admin keys are deployed to the system (Can be delayed for expediency by putting AWX key into `~root/.ssh/authorized_keys`)
-4. Create a PR to add the machine to [inventory.yml](https://github.com/AdoptOpenJDK/openjdk-infrastructure/blob/master/ansible/inventory.yml) (See NOTE at end of the list)
+4. Create a PR to add the machine to [inventory.yml](https://github.com/adoptium/infrastructure/blob/master/ansible/inventory.yml) (See NOTE at end of the list)
 5. Once merged, run the ansible scripts on it - ideally via AWX (Ensure the project and inventory sources are refreshed, then run the appropriate `Deploy **** playbook` template with a `LIMIT` of the new machine name)
 6. Add it to jenkins, verify a typical job runs on it if you can and add the appropriate tags
 
 NOTE ref inventory: If you are adding a new type of machine (`build`, `perf` etc.) you should also add it to
-   [adoptopenjdk_yaml.py](https://github.com/AdoptOpenJDK/openjdk-infrastructure/blob/master/ansible/plugins/inventory/adoptopenjdk_yaml.py#L45)
+   [adoptopenjdk_yaml.py](https://github.com/adoptium/infrastructure/blob/master/ansible/plugins/inventory/adoptopenjdk_yaml.py#L45)
    and, if it will be configured via the standard playbooks, add the new type to the
    list at the top of the main playbook files for
-   [*IX](https://github.com/AdoptOpenJDK/openjdk-infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/main.yml#L8) and
-   [windows](https://github.com/AdoptOpenJDK/openjdk-infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Windows_Playbook/main.yml#L20)
+   [*IX](https://github.com/adoptium/infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/main.yml#L8) and
+   [windows](https://github.com/adoptium/infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Windows_Playbook/main.yml#L20)
+
+## "DockerStatic" test systems
+
+The [DockerStatic role](https://github.com/adoptium/infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/roles/DockerStatic/tasks/main.yml)
+was first implemented in [this PR](https://github.com/adoptium/infrastructure/pull/1925)
+and extended through
+[this issue](https://github.com/adoptium/infrastructure/issues/1809) and is intended to allow us to make more
+efficient use of larger machines.  The role uses a set of Dockerfiles, one
+per distribution, which can be used to generate a set of docker machines
+that are started, exposed on an ssh port, and connected to jenkins.  They
+only contain the minimum required to run test jobs and cannot be used for
+builds.  These containers serve several purposes:
+
+1. We have some quite large machines, and this lets us split them up without full virtualisation
+2. It allows us to increase the number of distributions we test on
+3. We can run multiple tests in parallel on the host with isolation not available when multiple executors are used
+
+The DockerStatic role sets up several containers each with a different
+distribution and exposed on a specific port.  It also (at the time of
+writing) sets them up to be restricted to two cores and 6Gb of RAM which is
+adequate for most tests.  On larger machines it may be appropriate to modify
+those values, and we should look at whether we can reasonably autodetect or
+parameterize those values. Potentially we could also scale up and create
+more than one of each OS on a given host. To set up a host for running these
+you can use the
+[dockerhost.yml](https://github.com/adoptium/infrastructure/blob/master/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/dockerhost.yml)
+playbook (Also available via AWX).
+
+Once the static docker containers have been created they are connected into
+jenkins with a `test-docker-` prefix. Ideally the description of the machine
+in jenkins should list which host it's on, but you can also look up the
+IP address of the `test-docker-` system in the inventory.yml file to find
+out the host. The inventory file does NOT contain any of the `test-docker-`
+systems as they do not have the playbooks run against them. Normally
+machines used for this purpose will be prefixed `test-dockerhost-` to
+identify them and split them out so they do not have the full playbooks
+executed against them in order to keep the host system "clean". In some
+cases they may be used as `dockerBuild` hosts too.
+
+Instructions on how to create a static docker container can be found [here](https://github.com/adoptium/infrastructure/blob/dockerstatic.docs/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/roles/DockerStatic/README.md)
+
+### DockerHost TODO:
+1. Set up patching cycle
+2. Identify ways to redeploy when needed to pick up updates
+3. Allow dockerhost.yml playbook to adjust core file settings
+4. Add mechanism to deploy differently based on host machine size
+
+## Temporary access to a machine
+
+In some occasions non-infrastruture team members may wish to access a
+machine in order to reporoduce a test case failure, particularly if they do
+not have access to a machine of any given platform, or if the problem
+appears to be specific to a particular machine or cloud provider. In this
+case, the following procedure should be followed. Example commands are
+suitable for most UNIX-based platforms:
+
+1. User should raise a request for access using
+   [this template](https://github.com/adoptium/infrastructure/issues/new?assignees=sxa&labels=Temp+Infra+Access&template=machineaccess.md&title=Access+request+for+%3Cyour+username%3E)
+   (in general, "Non-privilieged" is the correct option to choose
+2. Infrastructure team member doing the following steps should assign the issue to themselves
+3. For non-privilieged users, create an account with a GECOS field referencing the requester and issue number e.g. `useradd -m -c "Stewart Addison 1234" sxa`
+4. Add the user's key to `.ssh/authorized_keys` on the machine with the user's public ssh key in it
+5. Add a comment to the issue with the username and IP address details
+6. The issue should be left open until the user is finished with the machine (if it has been a while, ask them in the issue)
+7. Once user is finished, remove the ID (`userdel -r username`)
+8. Close the issue

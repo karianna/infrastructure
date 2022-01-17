@@ -3,7 +3,7 @@
 ARCHITECTURE=""
 OS=""
 skipFullSetup=""
-gitURL="https://github.com/adoptopenjdk/openjdk-infrastructure"
+gitFork="adoptopenjdk"
 gitBranch="master"
 PORTNO=10022
 if [ "$EXECUTOR_NUMBER" ]; then
@@ -13,12 +13,13 @@ current_dir=false
 cleanWorkspace=false
 retainVM=false
 buildJDK=false
-buildURL="https://github.com/adoptopenjdk/openjdk-build"
+buildFork="adoptopenjdk"
 buildBranch="master"
 buildVariant=""
 testJDK=false
 # Default to building jdk8u
 jdkToBuild="jdk8u"
+verbosity=""
 
 # Parse Arguments
 processArgs() {
@@ -30,8 +31,8 @@ processArgs() {
 				ARCHITECTURE="$1"; shift;;			
 			"--build" | "-b" )
 				buildJDK=true;;
-			"--build-repo" | "-br" )
-				buildURL="$1"; shift;;
+			"--build-fork" | "-bf" )
+				buildFork="$1"; shift;;
 			"--build-branch" | "-bb" )
 				buildBranch="$1"; shift;;
 			"--build-hotspot" | "-hs" )
@@ -46,8 +47,8 @@ processArgs() {
 				retainVM=true;;
 			"--test" | "-t" )
 				testJDK=true;;
-			"--infra-repo" | "-ir" )
-				gitURL="$1"; shift;;
+			"--infra-fork" | "-if" )
+				gitFork="$1"; shift;;
 			"--infra-branch" | "-ib" )
 				gitBranch=$1; shift;;
 			"--skip-more" | "-sm" )
@@ -56,6 +57,8 @@ processArgs() {
 				OS="$1"; shift;;
 			"--jdk-version" | "-v" )
 				jdkToBuild="$1"; shift;;
+			"-V" | "-VV" | "-VVV" | "-VVVV" )
+				verbosity=$(echo $opt | tr '[:upper:]' '[:lower:]');;
 			*) echo >&2 "Invalid option: ${opt}"; echo "This option was unrecognised."; usage; exit 1;;
 		esac
 	done
@@ -65,19 +68,20 @@ usage() {
 	echo "Usage: ./qemu_test_script.sh (<options>) -a <architecture> -o <os>
 		--architecture | -a		Specifies the architecture to build the OS on
 		--build | -b			Build a JDK on the qemu VM
-		--build-repo | -br		Which openjdk-build to retrieve the build scripts from
+		--build-fork | -bf		Which openjdk-build to retrieve the build scripts from
 		--build-branch | -bb		Specify the branch of the build-repo (default: master)
-		--build-hotspot | -hs			Build a JDK with a Hotspot JVM instead of an OpenJ9 one
+		--build-hotspot | -hs		Build a JDK with a Hotspot JVM instead of an OpenJ9 one
 		--currentDir | -c		Set Workspace to directory of this script
 		--clean-workspace | -cw		Removes the old work folder (including logs)
 		--help | -h 			Shows this help message
-		--infra-repo | -ir		Which openjdk-infrastructure to retrieve the playbooks (default: www.github.com/adoptopenjdk/openjdk-infrastructure)
+		--infra-fork | -if		Which openjdk-infrastructure to retrieve the playbooks (default: adoptopenjdk)
 		--infra-branch | -ib		Specify the branch of the infra-repo (default: master)
 		--jdk-version | -v		Specify which JDK to build if '-b' is used (default: jdk8u)
 		--retainVM | -r			Retain the VM once running the playbook
 		--operating-system | -o 	Combined with --architecture runs a VM with the desired architecture and OS combo.
 		--skip-more | -sm		Skip non-essential roles from the playbook
 		--test | -t			Test the built JDK
+		-V				Apply verbose option to 'ansible-playbook', up to '-VVVV'
 		"	
 	showArchList
 }
@@ -235,12 +239,31 @@ done
 	  $SSH_CMD \
 	  $DRIVE \
      	  $EXTRA_ARGS \
-	  -nographic) > /dev/null 2>&1 &
+	  -nographic) > "$workFolder/${OS}.${ARCHITECTURE}.startlog" 2>&1 &
 
-	echo "Machine is booting; Please be patient"
-	sleep 120
-	echo "Machine has started"
+	echo "Machine is booting; logging console to $workFolder/${OS}.${ARCHITECTURE}.startlog"
+	echo "Please be patient - this can take up to 300 seconds"
 
+	SECONDS=0
+	while [ true ];
+	do
+		if tail "$workFolder/${OS}.${ARCHITECTURE}.startlog" | grep -q login; then
+			echo "VM Booted after $SECONDS seconds"
+			break;
+		fi
+		if [ $SECONDS -gt 300 ]; then
+			echo -e "Timeout Reached. See log below:\n"
+			tail "$workFolder/${OS}.${ARCHITECTURE}.startlog" | sed 's/^/CONSOLE > /g'
+			echo
+			if [[ "$retainVM" == false ]]; then
+				destroyVM
+				echo "Removing disk image"
+				rm -f ${workFolder}/${OS}.${ARCHITECTURE}.dsk
+			fi
+			exit 127
+		fi
+		sleep 10
+	done
 	# Remove old ssh key and create a new one
 	rm -f "$workFolder"/id_rsa*
 	ssh-keygen -q -f "$workFolder"/id_rsa -t rsa -N ''
@@ -257,18 +280,21 @@ done
 runPlaybook() {
 	local workFolder="$WORKSPACE"/qemu_pbCheck
 	local pbLogPath="$workFolder/logFiles/$OS.$ARCHITECTURE.log"
-	local extraAnsibleArgs=""
+	local extraAnsibleArgs="$verbosity"
+        local gitURL="https://github.com/$gitFork/openjdk-infrastructure"
 
 	# RISCV requires this be specified
 	if [[ $ARCHITECTURE == "RISCV" ]]; then
-		extraAnsibleArgs="-e ansible_python_interpreter=/usr/bin/python3"
+		# To fix the outdated repositories of the image
+		ssh -p $PORTNO -i "$workFolder"/id_rsa linux@localhost "sudo apt-get update --fix-missing"
+		extraAnsibleArgs="$extraAnsibleArgs -e ansible_python_interpreter=/usr/bin/python3"
 	fi
 
 	[[ ! -d "$workFolder/openjdk-infrastructure"  ]] && git clone -b "$gitBranch" "$gitURL" "$workFolder"/openjdk-infrastructure
 	cd "$workFolder"/openjdk-infrastructure/ansible || exit 1;
 	
 	# Increase timeout as to stop privilege timeout issues
-	# See: https://github.com/AdoptOpenJDK/openjdk-infrastructure/pull/1516#issue-470063061
+	# See: https://github.com/adoptium/infrastructure/pull/1516#issue-470063061
 	awk '{print}/^\[defaults\]$/{print "timeout = 30"}' < ansible.cfg > ansible.cfg.tmp && mv ansible.cfg.tmp ansible.cfg
 
 	ansible-playbook -i "localhost:$PORTNO," --private-key "$workFolder"/id_rsa -u linux -b ${extraAnsibleArgs} --skip-tags adoptopenjdk,jenkins${skipFullSetup} playbooks/AdoptOpenJDK_Unix_Playbook/main.yml 2>&1 | tee "$pbLogPath"
@@ -280,8 +306,9 @@ runPlaybook() {
 
 	if [[ "$buildJDK" == true ]]; then
 		local buildLogPath="$workFolder/logFiles/$OS.$ARCHITECTURE.build_log"
+		local buildRepoArgs="-f $buildFork -b $buildBranch"
 		
-		ssh linux@localhost -p "$PORTNO" -i "$workFolder"/id_rsa "git clone -b "$gitBranch" "$gitURL" \$HOME/openjdk-infrastructure && \$HOME/openjdk-infrastructure/ansible/pbTestScripts/buildJDK.sh --version $jdkToBuild $buildVariant --URL $buildURL/tree/$buildBranch" 2>&1 | tee "$buildLogPath"
+		ssh linux@localhost -p "$PORTNO" -i "$workFolder"/id_rsa "git clone -b "$gitBranch" "$gitURL" \$HOME/openjdk-infrastructure && \$HOME/openjdk-infrastructure/ansible/pbTestScripts/buildJDK.sh --version $jdkToBuild $buildVariant $buildRepoArgs" 2>&1 | tee "$buildLogPath"
 		if grep -q '] Error' "$buildLogPath" || grep -q 'configure: error' "$buildLogPath"; then
 			echo BUILD FAILED
 			destroyVM

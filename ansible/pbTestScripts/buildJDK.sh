@@ -3,8 +3,8 @@ set -eu
 
 setJDKVars() {
 	wget -q https://api.adoptopenjdk.net/v3/info/available_releases
-	JDK_MAX=$(awk -F: '/tip_version/{gsub("[, ]","",$2); print$2}' < available_releases)
-	JDK_GA=$(awk -F: '/most_recent_feature_release/{gsub("[, ]","",$2); print$2}' < available_releases)
+	JDK_MAX=$(awk -F: '/tip_version/{print$2}' < available_releases | tr -d ,)
+	JDK_GA=$(awk -F: '/most_recent_feature_release/{print$2}' < available_releases | tr -d ,)
 	rm available_releases
 }
 
@@ -15,9 +15,9 @@ processArgs() {
 		case "$opt" in
 			"--version" | "-v" )
 				if [ $1 == "jdk" ]; then
-					JAVA_TO_BUILD=$JDK_MAX
+					export JAVA_TO_BUILD=$JDK_MAX
 				else
-					JAVA_TO_BUILD=$(echo $1 | tr -d [:alpha:])
+					export JAVA_TO_BUILD=$(echo $1 | tr -d [:alpha:])
 				fi
 				checkJDK
 				shift;;
@@ -75,13 +75,47 @@ checkJDK() {
 	fi
 }
 
+# This method is required as there isn't a standardised JDK-7 for all platforms.
+# Some may be "zulu7", some may be 'java-1.7.0', or 'openjdk-7-jdk`
+findJDK7() {
+	local jdkPath=""
+	local pathSuffix="java-1.7.0 java-7-openjdk-amd64 zulu7 jdk-7"
+	for path in $pathSuffix
+	do
+		jdkPath=$(find /usr/lib/jvm/ -name $path)
+		if [[ $jdkPath != "" ]]; then
+			break
+		fi
+	done
+
+	# Last Resort: Use JDK8 to build JDK8
+	if [[ $jdkPath == "" ]]; then
+		jdkPath="/usr/lib/jvm/jdk8"
+	fi
+	
+	export JDK7_BOOT_DIR=$jdkPath
+}
+
 cloneRepo() {
 	if [ -d $WORKSPACE/openjdk-build ]; then
 		echo "Found existing openjdk-build folder"
 		cd $WORKSPACE/openjdk-build && git pull
 	else
-		echo "Cloning new openjdk-build folder"
-		git clone -b ${GIT_BRANCH} --single-branch https://github.com/${GIT_FORK}/openjdk-build $WORKSPACE/openjdk-build
+		echo "Cloning new openjdk-build/temurin-build folder"
+
+		local isRepoTemurin=$(curl https://api.github.com/repos/$GIT_FORK/temurin-build | grep "Not Found")
+		local isRepoOpenjdk=$(curl https://api.github.com/repos/$GIT_FORK/openjdk-build | grep "Not Found")
+
+		if [[ -z "$isRepoTemurin" ]]; then
+			GIT_REPO="https://github.com/${GIT_FORK}/temurin-build"
+		elif [[ -z "$isRepoOpenjdk" ]]; then
+			GIT_REPO="https://github.com/${GIT_FORK}/openjdk-build"
+		else
+			echo "Repository not found - the fork must be named temurin-build or openjdk-build"
+			exit 1
+		fi
+
+		git clone -b ${GIT_BRANCH} --single-branch $GIT_REPO $WORKSPACE/openjdk-build
 	fi
 }
 
@@ -91,22 +125,30 @@ GIT_FORK="adoptopenjdk"
 CLEAN_WORKSPACE=false
 JDK_MAX=
 JDK_GA=
+export VARIANT=openj9
 
 setJDKVars
 processArgs $*
 
 # Only build Hotspot on FreeBSD
-if [[ $(uname) == "FreeBSD" ]]; then
+if [[ "$(uname)" == "FreeBSD" ]]; then
         echo "Running on FreeBSD"
         export TARGET_OS=FreeBSD
         export VARIANT=hotspot
         export JAVA_TO_BUILD=jdk11u
         export JDK_BOOT_DIR=/usr/local/openjdk11
         export JAVA_HOME=/usr/local/openjdk8
+elif [[ "$(uname)" == "SunOS" ]]; then
+	echo "Running on Solaris/SunOS"
+	export TARGET_OS=solaris
+	echo "We only build Solaris on JDK8/HS"
+	export VARIANT=hotspot
+	export JAVA_TO_BUILD=jdk8u
+	export JAVA_HOME=/usr/lib/jvm/jdk8
 fi
 
 # Required as Debian Buster doesn't have gcc-4.8 available
-# See https://github.com/AdoptOpenJDK/openjdk-infrastructure/pull/1321#discussion_r426625178
+# See https://github.com/adoptium/infrastructure/pull/1321#discussion_r426625178
 if grep 'buster' /etc/*-release >/dev/null 2>&1; then
 	export CC=/usr/bin/gcc-7
 	export CXX=/usr/bin/g++-7
@@ -114,13 +156,22 @@ fi
 
 if [[ "$(uname -m)" == "aarch64" && "$JAVA_TO_BUILD" == "jdk8u" && $VARIANT == "openj9" ]]; then
 	echo "Can't build OpenJ9 JDK8 on AARCH64, Resetting JAVA_TO_BUILD to jdk11u"
-	JAVA_TO_BUILD=jdk11u
+	export JAVA_TO_BUILD=jdk11u
 fi
 
 if [[ "$(uname -m)" == "armv7l" && "$VARIANT" == "openj9" ]]; then
 	echo "OpenJ9 VM does not support armv7l - resetting VARIANT to hotspot"
 	export VARIANT=hotspot
 fi
+
+if [[ "$JAVA_TO_BUILD" == "jdk8u" ]]; then
+	findJDK7	
+fi
+
+# Don't build the debug-images as it takes too much space, and doesn't benefit VPC
+# See: https://github.com/adoptium/infrastructure/issues/2033
+export CONFIGURE_ARGS="--with-native-debug-symbols=none"
+export BUILD_ARGS="--custom-cacerts false"
 
 echo "buildJDK.sh DEBUG:
         TARGET_OS=${TARGET_OS:-}

@@ -11,7 +11,10 @@ hosts:
   - infrastructure:
 
       - aws:
-          ubuntu1604-x64-1: {ip: 54.78.186.5, user: ubuntu, description: trss.adoptopenjdk.net}
+          ubuntu1804-x64-1: {ip: 54.78.186.5, user: ubuntu, description: trss.adoptopenjdk.net}
+
+      - azure:
+          ubuntu2004-x64-1: {ip: 40.121.206.1, user: webmaster, description: jckservices.adoptium.net}
 
       - digitalocean:
           ubuntu2004-x64-1: {ip: 178.62.115.224, description: bastillion.adoptopenjdk.net}
@@ -29,6 +32,7 @@ hosts:
           win2012r2-x64-1: {ip: 8.208.11.212, user: Administrator}
           win2012r2-x64-2: {ip: 8.208.87.18, user: Administrator}
           ubuntu1804-armv8-1: {ip: 119.8.164.219}
+          ubuntu1804-armv8-2: {ip: 159.138.100.163}
 
       - azure:
           win2012r2-x64-1: {ip: 51.132.23.101, user: adoptopenjdk}
@@ -47,28 +51,30 @@ hosts:
           solaris10u11-sparcv9-2: {}
 
       - macstadium:
-          macos1010-x64-1: {ip: 207.254.50.138, user: Administrator}
           macos1014-x64-1: {ip: 208.83.1.170, user: Administrator}
           macos1014-x64-2: {ip: 207.254.28.76, user: Administrator}
+          macos1014-x64-3: {ip: 207.254.71.202, user: Administrator}
+          macos11-arm64-1: {ip: 207.254.31.15, user: Administrator}
+          macos11-arm64-2: {ip: 207.254.31.16, user: Administrator}
 
       - marist:
           rhel77-s390x-1: {ip: 148.100.86.102, user: linux1}
           rhel77-s390x-2: {ip: 148.100.245.197, user: linux1}
 
       - osuosl:
-          aix71-ppc64-1: {ip: 140.211.9.10, description: ojdk01}
-          aix71-ppc64-2: {ip: 140.211.9.12, description: ojdk02}
+          aix71-ppc64-1: {ip: 140.211.9.10, description: p8-aix1-adopt01.osuosl.org}
+          aix71-ppc64-2: {ip: 140.211.9.12, description: p8-aix1-adopt02.osuosl.org}
           centos74-ppc64le-1: {ip: 140.211.168.138}
           centos74-ppc64le-2: {ip: 140.211.168.117}
 
       - packet:
-          centos74-armv8-1: {ip: 147.75.196.30, description: ThunderX}
-          ubuntu1804-armv8-1: {ip: 139.178.82.234, description: D05}
+          centos8-armv8-1: {ip: 139.178.86.243, description: Altra}
 
       - scaleway:
-          ubuntu1604-armv7-1: {ip: 212.47.233.28}
-          ubuntu1604-armv7-2: {ip: 212.47.246.7}
           ubuntu1604-x64-1: {ip: 51.15.46.107}
+
+      - siteox:
+          solaris10u11-sparcv9-1: {ip: cloud.siteox.com, port: 24322}
 
       - ibmcloud:
           win2012r2-x64-1: {ip: 169.48.4.138, user: Administrator}
@@ -86,17 +92,27 @@ hosts:
           ubuntu1604-s390x-1: {ip: 148.100.113.58, user: ubuntu}
 
       - packet:
-          ubuntu1604-armv8-1: {ip: 147.75.77.146, description: D05}
           ubuntu2004-armv8-1: {ip: 139.178.82.146, description: Ampere eMag}
           ubuntu2004-x64-1: {ip: 139.178.85.251, description: AMD EPYC}
 
-      - scaleway:
-          ubuntu1604-armv7-1: {ip: 51.158.73.136}
+      - skytap:
+          ubuntu2004-ppc64le-1: {ip: 20.61.136.212}
+
+  - dockerhost:
+
+      - equinix:
+          ubuntu2004-x64-1: {ip: 139.178.85.251, description: AMD EPYC 2.8GHz 24 core, 64Gb}
+          ubuntu2004-x64-2: {ip: 147.75.79.143, description: Xeon GOLD 5120 28 core, 380Gb}
+          ubuntu2004-armv8-1: {ip: 147.75.35.203, description: Ampere Altra 160 core, 512Gb}
+
+      - osuosl:
+          ubuntu2004-ppc64le-1: {ip: 140.211.168.214}
 
   - test:
 
       - alibaba:
           ubuntu1804-armv8-1: {ip: 119.8.166.104}
+          ubuntu1804-armv8-2: {ip: 114.119.175.125}
 
       - azure:
           win2012r2-x64-1: {ip: 13.68.134.204, user: adoptopenjdk}
@@ -108,7 +124,10 @@ hosts:
           rhel76-armv8-1: {ip: 18.202.36.216, user: ec2-user}
           rhel8-x64-1: {ip: 54.246.216.49}
           ubuntu1804-armv8-1: {ip: 34.243.202.254}
-          win2019-x64-1: {ip: 34.244.74.139, user: Administrator}
+
+      - gdams:
+          debian10-riscv64-1: {ip: gdams.ddns.net}
+          debian10-riscv64-2: {ip: gdams.ddns.net, port: 2222}
 
       - ibm:
           aix71-ppc64-1: {ip: 129.33.196.209, user: b9s010a}
@@ -118,25 +137,25 @@ hosts:
           solaris10u11-sparcv9-1: {}
 
       - osuosl:
-          aix71-ppc64-1: {ip: 140.211.9.99, description: ojdk05}
-          aix72-ppc64-1: {ip: 140.211.9.28, description: p8-aix2-ojdk03.osuosl.org}
-          aix72-ppc64-2: {ip: 140.211.9.36, description: p8-aix2-ojdk04.osuosl.org}
+          aix71-ppc64-1: {ip: 140.211.9.99, description: p9-aix1-adopt05.osuosl.org}
+          aix715-ppc64-2: {ip: 140.211.9.100, description: p9-aix1-adopt06.osuosl.org}
+          aix715-ppc64-3: {ip: 140.211.9.168, description: p8-java1-adopt07.osuosl.org}
+          aix715-ppc64-4: {ip: 140.211.9.169, description: p8-java1-adopt08.osuosl.org}
+          aix72-ppc64-1: {ip: 140.211.9.28, description: p8-aix1-adopt03.osuosl.org}
+          aix72-ppc64-2: {ip: 140.211.9.36, description: p8-aix1-adopt04.osuosl.org}
+          aix724-ppc64-3: {ip: 140.211.9.163, description: p8-java1-adopt09.osuosl.org}
+          aix724-ppc64-4: {ip: 140.211.9.166, description: p8-java1-adopt10.osuosl.org}
           centos74-ppc64le-1: {ip: 140.211.168.228, user: centos}
           centos74-ppc64le-2: {ip: 140.211.168.217, user: centos}
-          centos74-ppc64le-4: {ip: 140.211.168.245, user: centos}
           ubuntu1604-ppc64le-1: {ip: 140.211.168.227, user: ubuntu}
           ubuntu1604-ppc64le-2: {ip: 140.211.168.190, user: ubuntu}
-          ubuntu1604-ppc64le-3: {ip: 140.211.168.248, user: ubuntu}
-          ubuntu1604-ppc64le-4: {ip: 140.211.168.239, user: ubuntu}
           ubuntu1804-ppc64le-1: {ip: 140.211.168.5, user: ubuntu}
           ubuntu1804-ppc64le-2: {ip: 140.211.168.8, user: ubuntu}
+          ubuntu2004-ppc64le-1: {ip: 140.211.168.235, user: ubuntu}
 
       - packet:
-          ubuntu1604-armv8-1: {ip: 147.75.74.50, description: ThunderX}
-          ubuntu1604-armv8-2: {ip: 147.75.193.234, description: ThunderX}
           ubuntu1604-x64-1: {ip: 147.75.204.239}
-          ubuntu1604-x64-2: {ip: 147.75.100.127}
-          ubuntu1604-x64-3: {ip: 147.75.83.133}
+          ubuntu2004-x64-2: {ip: 147.75.100.127}
           win2012r2-x64-1: {ip: 147.75.32.146, user: Admin}
 
       - macincloud:
@@ -155,10 +174,13 @@ hosts:
 
       - marist:
           sles12-s390x-1: {ip: 148.100.86.128}
+          sles15-s390x-1: {ip: 148.100.84.159, user: linux1, description: test machine in marist cloud}
+          rhel7-s390x-1: {ip: 148.100.84.26, user: linux1, description: test machine in marist cloud}
+          rhel8-s390x-1: {ip: 148.100.84.52, user: linux1, description: test machine in marist cloud}
           ubuntu1604-s390x-1: {ip: 148.100.113.20, user: ubuntu}
-          ubuntu1604-s390x-2: {ip: 148.100.113.25, user: ubuntu}
-          ubuntu1604-s390x-3: {ip: 148.100.113.30, user: ubuntu}
-          ubuntu1604-s390x-4: {ip: 148.100.113.46, user: ubuntu}
+          ubuntu1804-s390x-1: {ip: 148.100.113.30, user: ubuntu}
+          ubuntu1804-s390x-2: {ip: 148.100.113.46, user: ubuntu}
+          ubuntu1804-s390x-3: {ip: 148.100.113.25, user: ubuntu}
 
 
       # Nine machines are behind a firewall. Please contact @sxa or @gdams for access
@@ -168,6 +190,12 @@ hosts:
 
       - scaleway:
           ubuntu1604-x64-1: {ip: 51.15.76.107}
+
+      - siteox:
+          solaris10u11-sparcv9-1: {ip: cloud.siteox.com, port: 53322}
+
+      - skytap:
+          ubuntu2004-ppc64le-1: {ip: 20.61.136.210}
 
       - ibmcloud:
           rhel6-x64-1: {ip: 169.48.4.140}
