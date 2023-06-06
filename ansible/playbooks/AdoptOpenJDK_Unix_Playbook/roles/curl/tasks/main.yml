@@ -8,6 +8,7 @@
 - name: Check curl version
   shell: curl --version | head -n1 | awk '{print $2}'
   register: curl_version
+  changed_when: false
   tags:
     - curl
     - skip_ansible_lint
@@ -38,6 +39,13 @@
   delay: 5
   register: curl_download
   until: curl_download is not failed
+  when:
+    - ansible_distribution != "MacOSX"
+    - ((not curl_version.stdout) or ((curl_version.stdout) and (curl_version.stdout is version_compare(curl_oldest, operator='lt', strict=True))))
+  tags: curl
+
+- name: GPG Signature verification
+  script: ../Supporting_Scripts/package_signature_verification.sh -f /tmp/curl-{{ curl_latest }}.tar.gz -sl "https://github.com/curl/curl/releases/download/curl-7_79_1/curl-7.79.1.tar.gz.asc" -k {{ key.curl }}
   when:
     - ansible_distribution != "MacOSX"
     - ((not curl_version.stdout) or ((curl_version.stdout) and (curl_version.stdout is version_compare(curl_oldest, operator='lt', strict=True))))
@@ -79,7 +87,7 @@
   with_items:
     - /tmp/curl-{{ curl_latest }}.tar.gz
     - /tmp/curl-{{ curl_latest }}
-  ignore_errors: yes
+  failed_when: false
   when:
     - ansible_distribution != "MacOSX"
     - ((not curl_version.stdout) or ((curl_version.stdout) and (curl_version.stdout is version_compare(curl_oldest, operator='lt', strict=True))))
@@ -88,6 +96,7 @@
 - name: Get macOS version
   shell: sw_vers -productVersion
   register: macos_version
+  changed_when: false
   when:
     - ansible_distribution == "MacOSX"
   tags: curl
@@ -100,6 +109,8 @@
   tags: curl
 
 - name: Install latest version of curl for MacOS
+  become: yes
+  become_user: "{{ ansible_user }}"
   homebrew:
     name: curl
     state: latest
@@ -112,6 +123,7 @@
 - name: Find install directory MacOS
   shell: ls -la /usr/local/Cellar/curl/7.*/bin/curl | awk '{print $9}'
   register: curl_install_dir
+  changed_when: false
   when:
     - ansible_distribution == "MacOSX"
     - "macos_version_number is version('10.13', '>')"

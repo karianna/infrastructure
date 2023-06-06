@@ -1,0 +1,28 @@
+---
+- name: Add Docker Repo for SLES15
+  command: zypper ar https://download.docker.com/linux/sles/docker-ce.repo
+  when:
+    - ansible_architecture == "x86_64" or ansible_architecture == "s390x"
+
+- name: Add security repo for container-selinux
+  community.general.zypper_repository:
+    repo: https://download.opensuse.org/repositories/security:SELinux/SLE_15_SP3/security:SELinux.repo
+    state: present
+    auto_import_keys: yes
+  when:
+    - ansible_architecture == "x86_64" or ansible_architecture == "s390x"
+
+- name: Install Docker on SLES15
+  zypper:
+    pkg: "{{ item }}"
+    state: latest
+    update_cache: yes
+  with_items:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+  when:
+    - ansible_architecture == "x86_64" or ansible_architecture == "s390x"
+  tags:
+    # TODO: Package installs should not use latest
+    - skip_ansible_lint

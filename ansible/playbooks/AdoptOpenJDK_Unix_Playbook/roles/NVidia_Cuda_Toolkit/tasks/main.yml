@@ -19,7 +19,7 @@
   until: nvidia_cuda_toolkit_download is not failed
   when:
     - cuda_installed.stat.isdir is not defined
-    - (ansible_distribution == "Ubuntu" and ansible_distribution_major_version == "16") or (ansible_distribution == "RedHat" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7")) or (ansible_distribution == "CentOS" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7") )
+    - (ansible_distribution == "Ubuntu" and ansible_distribution_major_version == "16") or (ansible_distribution == "RedHat" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7")) or (ansible_distribution == "CentOS" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7"))
     - (ansible_architecture == "x86_64" or ansible_architecture == "ppc64le")
   tags: nvidia_cuda_toolkit
 
@@ -27,7 +27,7 @@
   command: sh /tmp/cuda9_linux-run --silent --toolkit --override
   when:
     - cuda_installed.stat.isdir is not defined
-    - (ansible_distribution == "Ubuntu" and ansible_distribution_major_version == "16") or (ansible_distribution == "RedHat" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7")) or (ansible_distribution == "CentOS" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7") )
+    - (ansible_distribution == "Ubuntu" and ansible_distribution_major_version == "16") or (ansible_distribution == "RedHat" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7")) or (ansible_distribution == "CentOS" and (ansible_distribution_major_version == "6" or ansible_distribution_major_version == "7"))
     - ansible_architecture == "x86_64"
   tags: nvidia_cuda_toolkit
 
@@ -57,7 +57,7 @@
 
 - name: Apply NVidia CUDA repo RPM - RHEL/CentOS 7 on PPC64LE
   yum: name=/tmp/cuda-repo-rhel7-9.ppc64le.rpm state=installed
-  ignore_errors: True
+  failed_when: false
   when:
     - cuda_installed.stat.isdir is not defined
     - ( ansible_distribution == "RedHat" or ansible_distribution == "CentOS" )
@@ -135,6 +135,7 @@
   register: nvidia_cuda_toolkit_download
   until: nvidia_cuda_toolkit_download is not failed
   when:
+    - cuda_installed.stat.isdir is not defined
     - (ansible_distribution == "Ubuntu" and ansible_distribution_major_version == "16")
     - ansible_architecture == "ppc64le"
   tags: nvidia_cuda_toolkit
@@ -143,6 +144,7 @@
   apt_key:
     url: https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/ppc64el/7fa2af80.pub
   when:
+    - cuda_installed.stat.isdir is not defined
     - (ansible_distribution == "Ubuntu" and ansible_distribution_major_version == "16")
     - ansible_architecture == "ppc64le"
   tags: nvidia_cuda_toolkit
@@ -165,5 +167,5 @@
     - /tmp/cuda9_linux-run
     - /tmp/cuda-repo-rhel7-9.ppc64le.rpm
     - /tmp/dkms.noarch.rpm
-  ignore_errors: yes
+  failed_when: false
   tags: nvidia_cuda_toolkit

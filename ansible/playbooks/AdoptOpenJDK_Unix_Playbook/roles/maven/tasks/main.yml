@@ -5,8 +5,9 @@
 
 - name: Check if Apache Maven  is already installed
   shell: mvn -version >/dev/null 2>&1
-  ignore_errors: yes
+  failed_when: false
   register: maven_installed
+  changed_when: false
   tags:
    - maven
    - skip_ansible_lint
@@ -22,6 +23,11 @@
 - name: Download Apache Maven v3.6.3 (Solaris)
   command: wget https://downloads.apache.org/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz -O /tmp/apache-maven-3.6.3-bin.tar.gz
   when: maven_installed.rc != 0 and ansible_distribution == "Solaris"
+  tags: maven
+
+- name: GPG Signature verification
+  script: ../Supporting_Scripts/package_signature_verification.sh -f /tmp/apache-maven-3.6.3-bin.tar.gz -sl "https://downloads.apache.org/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz.asc" -k {{ key.apache_maven }}
+  when: maven_installed.rc != 0
   tags: maven
 
 - name: Extract Apache Maven v3.6.3

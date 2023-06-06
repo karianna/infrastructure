@@ -182,7 +182,7 @@ We have some automation for running under Vagrant which we use to validate
 playbook changes before they are merged. See the
 [pbTestScripts](pbTestScripts/) folder for more info. The scripts from there
 are run on jenkins in the
-[VagrantPlaybookCheck](https://ci.adoptopenjdk.net/view/Tooling/job/VagrantPlaybookCheck/) job
+[VagrantPlaybookCheck](https://ci.adoptium.net/view/Tooling/job/VagrantPlaybookCheck/) job
 
 Any additional help in setting up Vagrant with Virtualbox can be found [here](https://www.vagrantup.com/intro/getting-started/index.html)
 
@@ -331,8 +331,9 @@ Several files will also need to be edited for Windows:
 To run the playbook against the VM, from the `openjdk-infrastructure/ansible` directory:
 
 ```bash
-ansible-playbook -i playbooks/AdoptOpenJDK_Windows_playbook/hosts.tmp -u vagrant --skip-tags jenkins,adoptopenjdk playbooks/AdoptOpenJDK_Windows_Playbook/main.yml
+ansible-playbook -i playbooks/AdoptOpenJDK_Windows_playbook/hosts.tmp -u vagrant --skip-tags jenkins,adoptopenjdk,MSVS_2013 playbooks/AdoptOpenJDK_Windows_Playbook/main.yml
 ```
+Note: it is recommended to skip the MSVS_2013 CE installation role (MSVS_2013) as it is no longer globally available, and is expected to be removed at some point, and replaced with a later version of MSVS.
 
 Alternatively, [pbTestScripts/vagrantPlaybookCheck.sh](pbTestScripts/vagrantPlaybookCheck.sh) will do this for you when executing `./vagrantPlaybookCheck.sh -v Win2012 -u https://github.com/adoptopenjdk/openjdk-infrastructure --retainVM`
 

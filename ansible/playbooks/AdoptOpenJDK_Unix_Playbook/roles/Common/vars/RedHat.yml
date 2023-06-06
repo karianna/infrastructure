@@ -15,9 +15,11 @@ Build_Tool_Packages:
   - curl
   - cups-devel
   - elfutils-libelf-devel
+  - file
   - flex                          # OpenJ9
   - fontconfig-devel
   - freetype-devel
+  - gnupg
   - gcc
   - gcc-c++
   - gettext
@@ -39,6 +41,7 @@ Build_Tool_Packages:
   - mpfr-devel
   - openssl-devel
   - perl-devel
+  - perl-IPC-Cmd                  # required for openssl v3 compiles
   - pkgconfig
   - systemtap-sdt-devel
   - unzip
@@ -58,11 +61,9 @@ Additional_Build_Tools_RHEL8:
   - glibc-langpack-zh             # required for creating Chinese locales
   - git
   - cmake
-  - ccache
 
 Additional_Build_Tools_RHEL7:
   - libstdc++-static
-  - ccache
 
 Additional_Build_Tools_RHEL7_PPC64LE:
   - libstdc++
@@ -77,7 +78,7 @@ Additional_Build_Tools_RHEL_ppc64:
   - glibc-devel.ppc               # a dependency required for executing a 32-bit C binary
   - libstdc++.ppc                 # a dependency required for executing a 32-bit C binary
 
-Additional_Build_Tools_RHEL_s390x:
+Additional_Build_Tools_RHEL7_s390x:
   - glibc.s390                    # a dependency required for executing a 32-bit C binary
   - glibc-devel.s390              # a dependency required for executing a 32-bit C binary
   - libstdc++.s390                # a dependency required for executing a 32-bit C binary

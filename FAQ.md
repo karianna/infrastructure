@@ -1,13 +1,13 @@
-# openjdk-infrastructure guide to frequent modifications and usage
+# Infrastructure guide to frequent modifications and usage
 
 ## Access control in the repository
-
 The three github teams relevant to this repository are as follows (Note, you
 won't necessarily have access to see these links):
 
-- [adoptopenjdk-infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/adoptopenjdk-infrastructure) - write access to the repository which lets you be an official approver of PRs (triage doesn't)
-- [infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure) - higher level of access for system administrators only
-- [admin_infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/admin_infrastructure) - The Admin team - can force through changes without approval etc.
+- [infrastructure-triage](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure) - was used for pre-Adoptium github access, but no longer actively used. Superceded by Temurin Contributor status
+- [infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure) - the main team of people working on infrastructure issues (Mostly superceded by Temurin->Collaborator access)
+- [infrastructure-core](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure-core) - higher level of access for system administrators only. Allows control of jenkins agents
+- [infrastructure-secret](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure-secret) - The group of people who have access to the secrets repository.
 
 ## Change approvals
 
@@ -18,6 +18,18 @@ circumstances such as a clear breakage that has a simple fix available
 then a repository admin may override that requirement to push through
 a change if no reviewers are available, but in such cases a comment
 explaining why must be added to the Pull Request.
+
+## GitHub actions CI jobs
+
+Most Ansible changes are tested automatically with a series of CI jobs:
+
+| Platform | Workflow File | Notes
+|---|---|---|
+| Centos 6 | [build.yml](./.github/workflows/build.yml) | |
+| Alpine 3 | [build.yml](./.github/workflows/build.yml) | |
+| macOS 11 | [build_mac.yml](./.github/workflows/build_mac.yml) | |
+| Windows (2019 and 2022) | [build_wsl.yml](./.github/workflows/build_wsl.yml) | Uses Windows Subsystem for Linux to run ansible |
+| Solaris 10 | [build_vagrant.yml](./.github/workflows/build_vagrant.yml) | Uses Vagrant to run a Solaris image inside a macOS host |
 
 ## Running the ansible scripts on local machines
 
@@ -70,11 +82,9 @@ have at the moment:
 
 | Dockerfile | Image | Platforms  | Where is this built? | In use?
 |---|---|---|---|---|
-| [Centos7](./ansible/docker/Dockerfile.CentOS7) | [`adoptopenjdk/centos7_build_image`](https://hub.docker.com/r/adoptopenjdk/centos7_build_image) | linux on x64, arm64, ppc64le, armv7l | [Jenkins](https://ci.adoptopenjdk.net/job/centos7_docker_image_updater/) | Yes
+| [Centos7](./ansible/docker/Dockerfile.CentOS7) | [`adoptopenjdk/centos7_build_image`](https://hub.docker.com/r/adoptopenjdk/centos7_build_image) | linux on amd64, arm64, ppc64le | [Jenkins](https://ci.adoptium.net/job/centos7_docker_image_updater/) | Yes
 | [Centos6](./ansible/docker/Dockerfile.CentOS6) | [`adoptopenjdk/centos6_build_image`](https://hub.docker.com/r/adoptopenjdk/centos6_build_image)| linux/amd64 | [GH Actions](.github/workflows/build.yml) | Yes
-| [Alpine3](./ansible/docker/Dockerfile.Alpine3) | [`adoptopenjdk/alpine3_build_image`](https://hub.docker.com/r/adoptopenjdk/alpine3_build_image) | linux/amd64 | [GH Actions](.github/workflows/build.yml) | Yes
-| [Windows2016_Base](./ansible/docker/Dockerfile.Windows2016_Base) | [`adoptopenjdk/windows2016_build_image:base`](https://hub.docker.com/r/adoptopenjdk/windows2016_build_image)| windows/amd64 | [GH Actions](.github/workflows/build_windows.yml) | No
-| [Windows2016_VS2017](./ansible/docker/Dockerfile.Windows2016_VS2017) | [`adoptopenjdk/windows2016_build_image:vs2017`](https://hub.docker.com/r/adoptopenjdk/windows2016_build_image)| windows/amd64 | [GH Actions](.github/workflows/build_windows.yml) | No
+| [Alpine3](./ansible/docker/Dockerfile.Alpine3) | [`adoptopenjdk/alpine3_build_image`](https://hub.docker.com/r/adoptopenjdk/alpine3_build_image) | linux/x64 & linux/arm64 | [Jenkins](https://ci.adoptium.net/job/centos7_docker_image_updater/) | Yes
 
 When a change lands into master, the relevant dockerfiles are built using
 the appropriate CI system listed in the table above by configuring them with
@@ -112,12 +122,13 @@ as an example
 
 The build triage team will frequently raise issues if they determine that a
 build failure is occurring on a particular system. Assuming it's not a
-"system is offline" issue you may wish to repliacte the build process
+"system is offline" issue you may wish to replicate the build process
 locally. The easiest way to do this is as follows (ideally not as root as
 that can mask problems).
-```
-git clone https://github.com/adoptopenjdk/openjdk-build
-cd openjdk-build/build-farm
+
+```sh
+git clone https://github.com/adoptium/temurin-build
+cd temurin-build/build-farm
 export CONFIGURE_ARGS=--with-native-debug-symbols=none
 export BUILD_ARGS="--custom-cacerts false"
 ./make-adopt-build-farm.sh jdk11u
@@ -157,7 +168,7 @@ For more information on test case diagnosis, there is a full
 [Triage guide](https://github.com/AdoptOpenJDK/openjdk-tests/blob/master/doc/Triage.md)
 in the openjdk-tests repository
 
-The values for `TARGET` can be found in thte `<testCaseName>` elements of
+The values for `TARGET` can be found in the `<testCaseName>` elements of
 .the various `playlist.xml` files in the test repositories. It can also be
 `jdk_custom` which case you should set the `CUSTOM_TARGET` to the name of
 an individual test for example:
@@ -166,13 +177,15 @@ an individual test for example:
 If you then need to run manually on the machine itself (outside jenkins)
 then the process is typically like this:
 
-```
-git clone https://github.com/adoptopenjdk/openjdk-tests && cd openjdk-tests
+```sh
+git clone https://github.com/adoptium/aqa-tests && cd aqa-tests
 ./get.sh && cd TKG
 export TEST_JDK_HOME=<path to JDK which you want to use for the tests>
-BUILD_LIST=openjdk make compile
-make <target>
+export BUILD_LIST=openjdk
+make compile
+make _<target>
 ```
+
 `BUILD_LIST` depends on the suite you want to run, and can be omitted to build
 the tests for everything, but that make take a while and requires `docker`
 to be available.  Note that when building the `system` suite, there must be
@@ -181,11 +194,19 @@ the test - it is normally a valid Grinder `TARGET` such as `jdk_net`. There
 is more information on running tests yourself in the
 [tests repository](https://github.com/AdoptOpenJDK/openjdk-tests/blob/master/doc/userGuide.md#local-testing-via-make-targets-on-the-commandline)
 
-A few examples that test specific pieces of infra-related functionality so useful to be aware of:
-- `BUILD_LIST=functional`, `CUSTOM_TARGET=_MBCS_Tests_pref_ja_JP_linux_0`
-- `BUILD_LIST=system`, `CUSTOM_TARGET=_MachineInfo`
-- `BUILD_LIST=openjdk`, `CUSTOM_TARGET=test/jdk/java/lang/invoke/lambda/LambdaFileEncodingSerialization.java` (`en_US.utf8` locale required)
-- `BUILD_LIST=system`, `TARGET=system.custom` `CUSTOM_TARGET=-test=MixedLoadTest -test-args="timeLimit=5m"` (`system_custom` was added in https://github.com/AdoptOpenJDK/openjdk-tests/pull/2234)
+A few examples that test specific pieces of infra-related functionality so useful to be aware of.
+These are the parameters to pass into a Grinder job in jenkins. If using
+these from the command line as per the example above, the `TARGET` name
+should have an underscore `_` prepended to it.
+
+| `BUILD_LIST` | `TARGET` | `CUSTOM_TARGET` | What does it test? |
+| --- | --- | --- | --- |
+| `system` | `MachineInfo` | | Basic test that JVM can retrieve system info |
+| `functional` | `MBCS_Tests_pref_ja_JP_linux_0` |  | MBCS packages and perl modules |
+| `openjdk` | `jdk_custom` | `java/lang/invoke/lambda/LambdaFileEncodingSerialization.java` | en_US.UTF8 locale required
+| `openjdk` | `jdk_custom` | `java/lang/ProcessHandle/InfoTest.java.InfoTest` | [Fails if 'sleep' invokes another process](https://github.com/adoptium/infrastructure/pull/2557#issuecomment-1135009749)
+| `openjdk` | `jdk_custom` | `javax/imageio/plugins/shared/ImageWriterCompressionTest.java` | Requires fontconfig on linux |
+| `system` | `system_custom` | `-test=MixedLoadTest -test-args=timeLimit=10m` | Run a longer systemtest |
 
 (For the last one, that makes use of the system.custom target added via
 [this PR](https://github.com/AdoptOpenJDK/openjdk-tests/pull/2234))
@@ -194,33 +215,47 @@ A few examples that test specific pieces of infra-related functionality so usefu
 
 If you are making a change which might have a negative effect on the
 playbooks on other platforms, be sure to run it through the
-[VagrantPlaybookCheck](https://ci.adoptopenjdk.net/view/work%20in%20progress/job/VagrantPlaybookCheck/)
+[VagrantPlaybookCheck](https://ci.adoptium.net/job/VagrantPlaybookCheck/)
 job first. This job takes a branch from a fork of the
-`openjdk-infrastructure` repository as a parameter and runs the playbooks
+`adoptium/infrastructure` repository as a parameter and runs the playbooks
 against a variety of Operating Systems using Vagrant and the scripts in
 [pbTestScripts](https://github.com/adoptium/infrastructure/tree/master/ansible/pbTestScripts)
 to validate them.
 
 ## Jenkins access
 
-The AdoptOpenJDK Jenkins server at [https://ci.adoptopenjdk.net](https://ci.adoptopenjdk.net) is used for all the
+The Adoptium Jenkins server at [https://ci.adoptium.net](https://ci.adoptium.net) is used for all the
 builds and testing automation. Since we're as open as possible, general read
 access is enabled. For others, access is controlled via github teams (via
 the Jenkins `Github Authentication Plugin` as follows. (Links here won't work for
 most people as the teams are restricted access)
 
-- [release](https://github.com/orgs/AdoptOpenJDK/teams/jenkins-admins/members) can run and configure jobs and views
-- [build](https://github.com/orgs/AdoptOpenJDK/teams/build/members) has the access for `release` plus the ability to create new jobs
-- [testing](https://github.com/orgs/AdoptOpenJDK/teams/testing/members) has the same access as `build`
-- [infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure/members) has the same as `build`/`testing` plus can manage agent machines
-- [jenkins-admins](https://github.com/orgs/AdoptOpenJDK/teams/jenkins-admins/members) as you might expect has access to Administer anything
+- [jenkins-admins](https://github.com/orgs/AdoptOpenJDK/teams/jenkins-admins/members) Full administrative access to the jenkins server
+- [build-triage](https://github.com/orgs/AdoptOpenJDK/teams/build-triage/members) View and run access to all build jobs (including non-Temurin ones)
+- [build](https://github.com/orgs/AdoptOpenJDK/teams/build/members) has the access for performing releases plus the ability to create new jobs
+- [build-core](https://github.com/orgs/AdoptOpenJDK/teams/build-core/members) Build members who have access to all jobs including signing
+- [build-release](https://github.com/orgs/AdoptOpenJDK/teams/build-release/members) Similar to build-core but without access to create new jobs and run [refactor_openjdk_release_tool](https://ci.adoptium.net/job/build-scripts/job/release/job/refactor_openjdk_release_tool/)
+- [installer](https://github.com/orgs/AdoptOpenJDK/teams/installer/members) Users who can access the installer creation jobs
+- [test-triage](https://github.com/orgs/AdoptOpenJDK/teams/test-triage/members) has ability to run Grinder jobs
+- [test](https://github.com/orgs/AdoptOpenJDK/teams/test/members) has the same access as `build`
+- [test-core](https://github.com/orgs/AdoptOpenJDK/teams/test-core/members) As test, but can also perform [TRSS syncs](https://ci.adoptium.net/job/TRSS_Code_Sync/)
+- [intrastructure-triage](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure-triage-/members) Allows access to [VPC](https://ci.adoptium.net/job/build-scripts/job/release/job/refactor_openjdk_release_tool) and [QPC](https://ci.adoptium.net/view/Tooling/job/VagrantPlaybookCheck/)
+- [infrastructure](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure/members) has the same as `build`/`test` plus can manage agent machines
+- [infrastructure-core](https://github.com/orgs/AdoptOpenJDK/teams/infrastructure-core/members) List of people with admin access to jenkins and infrastructure providers
 
-Some jobs within jenkins, such as the
-[build signing job](https://ci.adoptopenjdk.net/job/build-scripts/job/release/job/sign_build)
-and [Release tool job](https://ci.adoptopenjdk.net/job/build-scripts/job/release/job/refactor_openjdk_release_tool)
-are restricted further via the `Enable project-based security` section of
-the job definition. In the case of those two in particular it's `jenkins-admins` and
-`release` teams only who have access to them respectively.
+Note that the special `eclipse-temurin-bot` has explicit read only access to some of the build pipelines jobs too.
+
+For GitHub issue access, this is controlled by the Eclipse Foundation via
+the Adoptium projects, and people can be given "contributor" or
+"collaborator" access (see
+[the wiki](https://github.com/adoptium/adoptium/wiki/Working-with-Eclipse) for
+the processes around this) to the repositories which are under each Adoptium
+project as per
+[this comment](https://github.com/adoptium/infrastructure/issues/2549#issuecomment-1178903957). 
+Most of the relevant ones are under the
+[temurin](https://projects.eclipse.org/projects/adoptium.temurin/who)
+or [aqavit](https://projects.eclipse.org/projects/adoptium.aqavit) projects.
+
 
 ## Adding new systems
 
@@ -231,7 +266,7 @@ To add a new system:
 3. Add it to bastillion (requires extra privileges) so that all of the appropriate admin keys are deployed to the system (Can be delayed for expediency by putting AWX key into `~root/.ssh/authorized_keys`)
 4. Create a PR to add the machine to [inventory.yml](https://github.com/adoptium/infrastructure/blob/master/ansible/inventory.yml) (See NOTE at end of the list)
 5. Once merged, run the ansible scripts on it - ideally via AWX (Ensure the project and inventory sources are refreshed, then run the appropriate `Deploy **** playbook` template with a `LIMIT` of the new machine name)
-6. Add it to jenkins, verify a typical job runs on it if you can and add the appropriate tags
+6. Add it to Jenkins and verify a typical job runs on it if you can and add the appropriate tags.  When adding systems for use by test pipelines, verify all of the different types of tests can successfully run on that system by launching an [AQA_Test_Pipeline](https://ci.adoptium.net/job/AQA_Test_Pipeline/) job and setting LABEL parameter to the hostname of the machine.  Once you verify that the AQA_Test_Pipeline runs cleanly, you can add the appropriate test labels (as per LABELs defined in the aqa-tests [PLATFORM_MAP](https://github.com/adoptium/aqa-tests/blob/master/buildenv/jenkins/openjdk_tests#L3)).
 
 NOTE ref inventory: If you are adding a new type of machine (`build`, `perf` etc.) you should also add it to
    [adoptopenjdk_yaml.py](https://github.com/adoptium/infrastructure/blob/master/ansible/plugins/inventory/adoptopenjdk_yaml.py#L45)
@@ -278,9 +313,10 @@ identify them and split them out so they do not have the full playbooks
 executed against them in order to keep the host system "clean". In some
 cases they may be used as `dockerBuild` hosts too.
 
-Instructions on how to create a static docker container can be found [here](https://github.com/adoptium/infrastructure/blob/dockerstatic.docs/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/roles/DockerStatic/README.md)
+Instructions on how to create a static docker container can be found [here](https://github.com/adoptium/infrastructure/tree/master/ansible/playbooks/AdoptOpenJDK_Unix_Playbook/roles/DockerStatic/README.md)
 
-### DockerHost TODO:
+### DockerHost TODO
+
 1. Set up patching cycle
 2. Identify ways to redeploy when needed to pick up updates
 3. Allow dockerhost.yml playbook to adjust core file settings
@@ -288,8 +324,8 @@ Instructions on how to create a static docker container can be found [here](http
 
 ## Temporary access to a machine
 
-In some occasions non-infrastruture team members may wish to access a
-machine in order to reporoduce a test case failure, particularly if they do
+In some occasions non-infrastructure team members may wish to access a
+machine in order to reproduce a test case failure, particularly if they do
 not have access to a machine of any given platform, or if the problem
 appears to be specific to a particular machine or cloud provider. In this
 case, the following procedure should be followed. Example commands are
@@ -297,9 +333,9 @@ suitable for most UNIX-based platforms:
 
 1. User should raise a request for access using
    [this template](https://github.com/adoptium/infrastructure/issues/new?assignees=sxa&labels=Temp+Infra+Access&template=machineaccess.md&title=Access+request+for+%3Cyour+username%3E)
-   (in general, "Non-privilieged" is the correct option to choose
+   (in general, "Non-privileged" is the correct option to choose
 2. Infrastructure team member doing the following steps should assign the issue to themselves
-3. For non-privilieged users, create an account with a GECOS field referencing the requester and issue number e.g. `useradd -m -c "Stewart Addison 1234" sxa`
+3. For non-privileged users, create an account with a GECOS field referencing the requester and issue number e.g. `useradd -m -c "Stewart Addison 1234" sxa`
 4. Add the user's key to `.ssh/authorized_keys` on the machine with the user's public ssh key in it
 5. Add a comment to the issue with the username and IP address details
 6. The issue should be left open until the user is finished with the machine (if it has been a while, ask them in the issue)
