@@ -29,6 +29,7 @@ Build_Tool_Packages:
   - openjdk11
   - pkgconf
   - png
+  - strace                        # For SBOM dependency analysis
   - unzip
   - wget
   - zip
@@ -37,7 +38,6 @@ gcc_compiler:
   - gcc48
 
 Test_Tool_Packages:
-  - mercurial
   - perl5
   - xauth
   - xorg

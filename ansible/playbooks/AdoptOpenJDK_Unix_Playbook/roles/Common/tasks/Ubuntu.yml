@@ -24,7 +24,7 @@
 
 - name: Add Azul Zulu GPG Package Signing Key for x86_64
   apt_key:
-    url: http://repos.azulsystems.com/RPM-GPG-KEY-azulsystems
+    url: https://repos.azulsystems.com/RPM-GPG-KEY-azulsystems
     state: present
   when:
     - ansible_architecture == "x86_64"
@@ -82,6 +82,20 @@
     - ansible_architecture == "aarch64"
   tags: build_tools
 
+- name: Install additional build tools for !riscv64
+  package: "name={{ item }} state=latest"
+  with_items: "{{ Additional_Build_Tools_not_riscv64 }}"
+  when:
+    - ansible_architecture != "riscv64"
+  tags: build_tools
+
+- name: Install additional build tools for riscv64
+  package: "name={{ item }} state=latest"
+  with_items: "{{ Additional_Build_Tools_riscv64 }}"
+  when:
+    - ansible_architecture == "riscv64"
+  tags: build_tools
+
 - name: Install additional build tools for Ubuntu 20 +
   package: "name={{ item }} state=latest"
   with_items: "{{ Additional_Build_Tools_Ubuntu20 }}"
@@ -104,12 +118,14 @@
   with_items: "{{ Additional_Packages_Ubuntu16 }}"
   when:
     - ansible_distribution_major_version == "16"
+  tags: test_tools
 
 - name: Install additional Packages specific to Ubuntu 18
   package: "name={{ item }} state=latest"
   with_items: "{{ Additional_Packages_Ubuntu18 }}"
   when:
     - ansible_distribution_major_version == "18"
+  tags: test_tools
 
 - name: Download LibFFI6 v3.2.1_8 For Ubuntu 20 or 22 on S390X
   get_url:
@@ -121,12 +137,14 @@
   when:
     - (ansible_distribution_major_version == "20" and ansible_architecture == "s390x") or
       (ansible_distribution_major_version == "22" and ansible_architecture == "s390x")
+  tags: test_tools
 
 - name: Install LibFFI6 v3.2.1_8 For Ubuntu 20 or 22 on S390X
   apt: deb="/tmp/libffi6_3.2.1-8_s390x.deb"
   when:
     - (ansible_distribution_major_version == "20" and ansible_architecture == "s390x") or
       (ansible_distribution_major_version == "22" and ansible_architecture == "s390x")
+  tags: test_tools
 
 ####################
 # Set default Java #
@@ -147,6 +165,54 @@
   when:
     - ansible_architecture == "armv7l"
   tags: default_java
+
+- name: Check if JDK25/arm32 is already installed in the target location
+  stat: path=/usr/lib/jvm/jdk25/bin/java
+  register: jdk25_installed
+  when:
+    - ansible_architecture == "armv7l"
+  tags: build_tools
+
+- name: Download JDK25/arm32 build
+  get_url:
+    url: https://ci.adoptium.net/userContent/arm32/OpenJDK25U.arm32_linux.25+36.tar.gz
+    dest: /tmp/OpenJDK25U.arm32_linux.25+36.tar.gz
+    force: no
+    mode: 0755
+    checksum: sha256:de160d44d5dbcb37c47cc1bd983e21fcb5dedd5ae16be21048e9a5c80f114502
+  when:
+    - ansible_architecture == "armv7l"
+    - not jdk25_installed.stat.exists
+  tags: build_tools
+
+- name: Decompress jdk25/arm32
+  unarchive:
+    src: /tmp/OpenJDK25U.arm32_linux.25+36.tar.gz
+    dest: /usr/lib/jvm
+    remote_src: yes
+  when:
+    - ansible_architecture == "armv7l"
+    - not jdk25_installed.stat.exists
+  tags: build_tools
+
+- name: Remove jdk25/arm32 tarball
+  file:
+    path: /tmp/OpenJDK25U.arm32_linux.25+36.tar.gz
+    state: absent
+  when:
+    - ansible_architecture == "armv7l"
+    - not jdk25_installed.stat.exists
+  tags: build_tools
+
+- name: Create jdk25 symlink on arm32
+  file:
+    src: /usr/lib/jvm/jdk-25+36
+    dest: /usr/lib/jvm/jdk25
+    state: link
+  when:
+    - ansible_architecture == "armv7l"
+    - not jdk25_installed.stat.exists
+  tags: adoptopenjdk_install
 
 - name: Set default java version for ppc64le
   alternatives:

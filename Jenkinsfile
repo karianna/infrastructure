@@ -2,10 +2,18 @@ pipeline {
     agent none
     stages {
         stage('Docker Build') {
-            parallel { 
+            parallel {
+                stage('CentOS6 x64') {
+                    agent {
+                        label "dockerBuild&&linux&&x64&&containerBuilder"
+                    } 
+                    steps {
+                        dockerBuild('amd64', 'centos6', 'Dockerfile.CentOS6')
+                    }
+                }
                 stage('CentOS7 x64') {
                     agent {
-                        label "dockerBuild&&linux&&x64"
+                        label "dockerBuild&&linux&&x64&&containerBuilder"
                     } 
                     steps {
                         dockerBuild('amd64', 'centos7', 'Dockerfile.CentOS7')
@@ -29,15 +37,23 @@ pipeline {
                 }
                 stage('Ubuntu16.04 armv7l') {
                     agent {
-                        label "docker&&linux&&armv7l"
+                        label "docker&&linux&&aarch64"
                     }
                     steps {
-                        dockerBuild('armv7l', 'ubuntu1604', 'Dockerfile.Ubuntu1604')
+                        dockerBuildArm32('armv7l', 'ubuntu1604', 'Dockerfile.Ubuntu1604')
+                    }
+                }
+                stage('Ubuntu20.04 riscv64') {
+                    agent {
+                        label "docker&&linux&&riscv64"
+                    }
+                    steps {
+                        dockerBuild('riscv64', 'ubuntu2004', 'Dockerfile.Ubuntu2004-riscv64')
                     }
                 }
                 stage('Alpine3 x64') {
                     agent {
-                        label "dockerBuild&&linux&&x64"
+                        label "dockerBuild&&linux&&x64&&containerBuilder"
                     }
                     steps {
                         dockerBuild('amd64', 'alpine3', 'Dockerfile.Alpine3')
@@ -65,7 +81,21 @@ pipeline {
             }
         }
     } 
-} 
+}
+
+def dockerBuildArm32(architecture, distro, dockerfile) {
+    git poll: false, url: 'https://github.com/adoptium/infrastructure.git'
+    def git_sha = "${env.GIT_COMMIT.trim()}"
+    def ansible_arch = "armv7l"
+    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+        sh """
+            docker buildx build --platform linux/arm/v7 \
+            --build-arg git_sha=$git_sha --build-arg ansible_arch=$ansible_arch \
+            -f ansible/docker/$dockerfile \
+            -t adoptopenjdk/${distro}_build_image:linux-$architecture --push .
+        """
+    }
+}
 
 def dockerBuild(architecture, distro, dockerfile) {
     git poll: false, url: 'https://github.com/adoptium/infrastructure.git'
@@ -83,6 +113,12 @@ def dockerManifest() {
     docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
         git poll: false, url: 'https://github.com/adoptium/infrastructure.git'
         sh '''
+            # Centos6
+            export TARGET="adoptopenjdk/centos6_build_image"
+            AMD64=$TARGET:linux-amd64
+            docker manifest create $TARGET $AMD64
+            docker manifest annotate $TARGET $AMD64 --arch amd64 --os linux
+            docker manifest push $TARGET
             # Centos7
             export TARGET="adoptopenjdk/centos7_build_image"
             AMD64=$TARGET:linux-amd64

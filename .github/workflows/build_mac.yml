@@ -5,7 +5,7 @@ on:
     paths:
     - .github/workflows/build_mac.yml
     - ansible/playbooks/AdoptOpenJDK_Unix_Playbook/**
-    branches:         
+    branches:
     - master
 
 permissions:
@@ -17,12 +17,22 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-11]
+        os: [macos-14, macos-15, macos-26]
+      fail-fast: false
     steps:
 
-    - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-    - name: Install dependencies
+    - name: Install Python
+      run: brew install python@3.12 --overwrite
+
+    - name: Configure dirmgr
+      run: |
+        mkdir -p ~/.gnupg/
+        touch ~/.gnupg/dirmngr.conf
+        echo "standard-resolver" >  ~/.gnupg/dirmngr.conf
+
+    - name: Install Ansible
       run: brew install ansible
 
     - name: Run Ansible Playbook

@@ -25,16 +25,16 @@
 
 - name: Set homebrew path (x64)
   set_fact:
-    homebrew_path: /usr/local/bin/brew
+    homebrew_path: /usr/local/bin
   when: ansible_architecture == "x86_64"
 
 - name: Set homebrew path (Arm64)
   set_fact:
-    homebrew_path: /opt/homebrew/bin/brew
+    homebrew_path: /opt/homebrew/bin
   when: ansible_architecture == "arm64"
 
 - name: Configure system-wide Bash profile
-  become: yes
+  become: true
   copy:
     src: files/macos/profile
     dest: /etc/profile
@@ -42,7 +42,7 @@
     group: wheel
 
 - name: Ensure that directory for system-wide profile extensions is present
-  become: yes
+  become: true
   file:
     path: /etc/profile.d
     owner: root
@@ -67,81 +67,127 @@
 
 - name: Check if Homebrew is already installed
   stat:
-    path: "{{ homebrew_path }}"
+    path: "{{ homebrew_path }}/brew"
   register: brew
 
 - name: Install Homebrew
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
   script: scripts/install-homebrew.sh
   when: not brew.stat.exists
 
+- name: Switch back to command line tools xcode before proceeding
+  command: sudo xcode-select --switch /
+  tags: adoptopenjdk
+
 - name: Upgrade installed packages
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
   homebrew:
     upgrade_all: yes
+    path: "{{ homebrew_path }}"
   when: "macos_version_number is version('10.15', '>')"
   tags:
     - brew_upgrade
 
 - name: Install brew cu
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
   homebrew_tap:
     name: buo/cask-upgrade
+    path: "{{ homebrew_path }}"
   tags:
     - brew_cu
 
-- name: Add AdoptOpenJDK Java Repo
-  become: yes
-  become_user: "{{ ansible_user }}"
-  homebrew_tap:
-    name: AdoptOpenJDK/openjdk
-
 # Skipping linting as no situation where this can't run (lint error 301)
 - name: Update Casks
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
-  command: "{{ homebrew_path }} cu -y"
+  command: "{{ homebrew_path }}/brew cu -y"
   tags:
     - brew_cu
     - skip_ansible_lint
 
 - name: Install Build Tool Packages
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
-  homebrew: "name={{ item }} state=present"
+  homebrew:
+    name: "{{ item }}"
+    state: present
+    path: "{{ homebrew_path }}"
   with_items: "{{ Build_Tool_Packages }}"
   tags: build_tools
 
-- name: Install Build Tool Packages NOT macOS 10.12
-  become: yes
+# Install CMAKE Where It Doesn't exist
+- name: Check if cmake is installed in /opt/homebrew/bin
+  stat:
+    path: /opt/homebrew/bin/cmake
+  register: cmake_homebrew
+
+- name: Check if cmake is installed in /usr/local/bin
+  stat:
+    path: /usr/local/bin/cmake
+  register: cmake_local
+
+- name: Install Cmake
+  become: true
   become_user: "{{ ansible_user }}"
-  homebrew: "name={{ item }} state=present"
+  homebrew:
+    name: "cmake"
+    state: present
+  tags: build_tools
+  when: not (cmake_homebrew.stat.exists or cmake_local.stat.exists)
+
+- name: Install Build Tool Packages NOT MacOS 14 arm64
+  become: true
+  become_user: "{{ ansible_user }}"
+  homebrew:
+    name: "{{ item }}"
+    state: present
+    path: "{{ homebrew_path }}"
+  with_items: "{{ Build_Tool_Packages_Not_MacOS14_arm64 }}"
+  when: not ((macos_version_number | regex_search("14")) and ansible_architecture == "arm64")
+  tags: build_tools
+
+- name: Install Build Tool Packages NOT macOS 10.12
+  become: true
+  become_user: "{{ ansible_user }}"
+  homebrew:
+    name: "{{ item }}"
+    state: present
+    path: "{{ homebrew_path }}"
   with_items: "{{ Build_Tool_Packages_NOT_10_12 }}"
   when:
     - not (macos_version_number | regex_search("10.12"))
   tags: build_tools
 
 - name: Install Build Tool Casks
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
-  homebrew_cask: "name={{ item }} state=present"
+  homebrew_cask:
+    name: "{{ item }}"
+    state: present
+    path: "{{ homebrew_path }}"
   with_items: "{{ Build_Tool_Casks }}"
   tags: build_tools
 
 - name: Install Test Tool Packages
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
-  homebrew: "name={{ item }} state=present"
+  homebrew:
+    name: "{{ item }}"
+    state: present
+    path: "{{ homebrew_path }}"
   with_items: "{{ Test_Tool_Packages }}"
   tags: test_tools
 
 - name: Install JCK Tool Casks
-  become: yes
+  become: true
   become_user: "{{ ansible_user }}"
-  homebrew_cask: "name={{ item }} state=present"
+  homebrew_cask:
+    name: "{{ item }}"
+    state: present
+    path: "{{ homebrew_path }}"
   with_items: "{{ JCK_Tool_Casks }}"
   tags: jck_tools
 
@@ -192,6 +238,39 @@
     group: staff
   tags:
     - core_dumps
+
+- name: Create limit.core.plist file in /Library/LaunchDaemons
+  copy:
+    dest: /Library/LaunchDaemons/limit.core.plist
+    owner: root
+    group: wheel
+    mode: 0644
+    content: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+      "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict>
+      <key>Label</key>
+      <string>limit.core</string>
+      <key>ProgramArguments</key>
+      <array>
+      <string>launchctl</string>
+      <string>limit</string>
+      <string>core</string>
+      <string>8388608</string>
+      <string>8388608</string>
+      </array>
+      <key>RunAtLoad</key>
+      <true/>
+      <key>ServiceIPC</key>
+      <false/>
+      </dict>
+      </plist>
+  become: true
+
+- name: Load limit.core.plist file with launchctl
+  command: sudo launchctl load -w /Library/LaunchDaemons/limit.core.plist
 
 # Skipping linting as not to introduce handlers into task-only playbooks (lint error 503)
 - name: Reboot macOS after tweaking kernel tuning parameters

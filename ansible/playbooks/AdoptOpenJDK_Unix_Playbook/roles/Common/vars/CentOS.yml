@@ -12,8 +12,8 @@ Build_Tool_Packages:
   - bzip2
   - ca-certificates
   - cpio
-  - curl
   - cups-devel
+  - diffutils
   - elfutils-libelf-devel
   - file
   - flex                          # OpenJ9
@@ -26,7 +26,8 @@ Build_Tool_Packages:
   - glibc-common
   - glibc-devel
   - gmp-devel
-  - java-1.8.0-openjdk-devel
+  - gnutls
+  - gnutls-utils
   - libcurl-devel
   - libpng-devel
   - libXext-devel
@@ -38,9 +39,12 @@ Build_Tool_Packages:
   - make
   - mesa-libGL-devel
   - mpfr-devel
+  - nss-devel
+  - nss-tools
   - numactl-devel                 # OpenJ9
   - openssh-clients               # IBM: cloning over SSH
   - openssl-devel
+  - patch                         # For DevKit creation that runs "patch"
   - perl-DBI
   - perl-devel
   - perl-Digest-SHA
@@ -48,8 +52,11 @@ Build_Tool_Packages:
   - perl-IPC-Cmd                  # required for openssl v3 compiles
   - perl-libwww-perl
   - perl-Time-HiRes
+  - perl-Time-Piece               # required for openssl v3.5.3+ compiles
   - pigz
+  - strace                        # For SBOM dependency analysis
   - systemtap-sdt-devel
+  - texinfo
   - unzip
   - wget
   - which
@@ -64,8 +71,9 @@ gcc48_devtoolset_compiler:
 Additional_Build_Tools_CentOS7:
   - libstdc++-static
   - ccache
+  - procps-ng
 
-Additional_Build_Tools_CentOS8:
+Additional_Build_Tools_CentOS8_Plus:
   - glibc-locale-source
   - glibc-langpack-ja             # required for creating Japanese locales
   - glibc-langpack-ko             # required for creating Korean locales
@@ -73,23 +81,35 @@ Additional_Build_Tools_CentOS8:
   - git
   - cmake
   - ccache
+  - procps-ng
 
-Additional_Build_Tools_NOT_CentOS8:
+Additional_Build_Tools_NOT_CentOS8plus:
   - lbzip2
   - java-1.7.0-openjdk-devel
+  - java-1.8.0-openjdk-devel
   - ntp
 
 Additional_Build_Tools_CentOS_x86:
   - glibc.i686                    # a dependency required for executing a 32-bit C binary
   - glibc-devel.i686              # a dependency required for executing a 32-bit C binary
   - libstdc++.i686                # a dependency required for executing a 32-bit C binary
+  - libnss3.so
+  - libnssutil3.so
 
 Additional_Build_Tools_CentOS8_Stream:
-  - libdwarf.x86_64
+  - libdwarf
   - libmpc-devel
 
 Additional_Build_Tools_NOT_CentOS8_Stream:
   - libdwarf-devel                # OpenJ9
+
+Additional_Test_Tools_CentOS10_Plus:
+  - weston
+  - xwayland-run
+
+Additional_Test_Tools_PreCentOS10:
+  - xorg-x11-server-Xvfb
+  - java-1.8.0-openjdk-devel
 
 Test_Tool_Packages:
   - gcc
@@ -98,10 +118,19 @@ Test_Tool_Packages:
   - zlib-devel
   - perl-devel
   - libcurl-devel
+  - openssl
   - openssl-devel
-  - mercurial
   - perl
   - perl-Test-Simple
   - xorg-x11-xauth
-  - xorg-x11-server-Xvfb
   - fakeroot
+  - gnutls
+  - gnutls-utils
+  - shared-mime-info
+  - nss-devel
+  - nss-tools
+
+Additional_Test_Tool_Packages_Wayland:
+  - weston
+  - wayland-utils
+  - xorg-x11-server-Xwayland

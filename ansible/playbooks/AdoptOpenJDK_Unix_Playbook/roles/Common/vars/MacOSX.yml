@@ -8,7 +8,6 @@
 Build_Tool_Packages:
   - autoconf
   - automake # for compiling freetype on JDK8u
-  - cmake # OpenJ9
   - coreutils
   - gnupg
   - gnu-sed
@@ -16,17 +15,20 @@ Build_Tool_Packages:
   - nasm # openj9 jdk13+
   - wget
   - bash # OpenJ9 needs bash v4 or later
+  - make
+
+Build_Tool_Packages_Not_MacOS14_arm64:
+  - git # We want to use system git for MacOS14 arm64
 
 Build_Tool_Packages_NOT_10_12:
   - ccache # ccache is no longer working on macOS 10.12
 
 Build_Tool_Casks:
-  - adoptopenjdk10
   - packages
 
 Test_Tool_Packages:
-  - mercurial
   - pulseaudio
+  - jq
 
 JCK_Tool_Casks:
   - blackhole-2ch # Used to emulate a line in feed for JCK tests

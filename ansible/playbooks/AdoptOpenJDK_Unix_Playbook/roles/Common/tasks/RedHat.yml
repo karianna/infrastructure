@@ -16,19 +16,41 @@
     - ansible_architecture == "x86_64"
   tags: patch_update
 
+- name: Import EPEL GPG key
+  rpm_key:
+    state: present
+    key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_distribution_major_version }}
+  tags: patch_update
 
-- name: Enable EPEL release for RHEL8 or RHEL6 or RHEL7
+- name: Enable EPEL release for RHEL
   yum: name=https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm
   failed_when: false
   when:
     - ansible_architecture != "s390x"
-    - (ansible_distribution_major_version == "8") or (ansible_distribution_major_version == "6") or (ansible_distribution_major_version == "7")
   tags: patch_update
 
-- name: YUM upgrade all packages
+- name: Enable CodeReady Builder repos on Rhel8Plus
+  shell: |
+    subscription-manager repos --enable codeready-builder-for-rhel-{{ ansible_distribution_major_version }}-$(arch)-rpms
+  when:
+    - (ansible_distribution == "RedHat" and (ansible_distribution_major_version | int >= 8))
+  tags: patch_update
+
+- name: YUM upgrade all packages ( Prior To RHEL8 )
   yum:
     name: '*'
     state: latest
+  when:
+    - (ansible_distribution == "RedHat" and (ansible_distribution_major_version | int < 8))
+  tags: patch_update
+
+# For RHEL8 plus to avoid conflicts with system python and ansible
+# Fall back to the shell to do the package upgrade
+- name: YUM upgrade all packages ( RHEL8+ )
+  command: dnf -y upgrade
+  changed_when: true
+  when:
+    - (ansible_distribution == "RedHat" and (ansible_distribution_major_version | int >= 8))
   tags: patch_update
 
 # TODO: We should find a better way of doing this in the future, for some reason these deps aren't in the aarch64 rhel 7 repos.
@@ -53,11 +75,11 @@
 ##########################
 # Additional build tools #
 ##########################
-- name: Install additional build tools if NOT RHEL 8
+- name: Install additional build tools if NOT RHEL8 and above
   package: "name={{ item }} state=latest"
-  with_items: "{{ Additional_Build_Tools_NOT_RHEL8 }}"
+  with_items: "{{ Additional_Build_Tools_NOT_RHEL8Plus }}"
   when:
-    - (ansible_distribution_major_version != "8")
+    - not (ansible_distribution_major_version | int >= 8)
   tags: build_tools
 
 - name: Install additional build tools for RHEL 7
@@ -78,6 +100,14 @@
 - name: Install numactl-devel excluding RHEL 7 on s390x
   package: "name=numactl-devel state=latest"
   when:
+    - ansible_distribution_major_version | int < 8
+    - not (ansible_distribution_major_version == "7" and ansible_architecture == "s390x")
+  tags: build_tools
+
+- name: Install numactl-devel (RHEL 8+)
+  command: dnf -y install numactl-devel
+  when:
+    - ansible_distribution_major_version | int >= 8
     - not (ansible_distribution_major_version == "7" and ansible_architecture == "s390x")
   tags: build_tools
 
@@ -86,6 +116,23 @@
   with_items: "{{ Additional_Build_Tools_RHEL_x86 }}"
   when:
     - ansible_architecture == "x86_64"
+    - ansible_distribution_major_version | int < 8
+  tags: build_tools
+
+- name: Install additional build tools for RHEL8+ on x86
+  command: dnf -y install {{ item }}
+  with_items: "{{ Additional_Build_Tools_RHEL_x86 }}"
+  when:
+    - ansible_architecture == "x86_64"
+    - ansible_distribution_major_version | int >= 8
+  tags: build_tools
+
+- name: Install additional build tools for RHEL10+ on x86
+  package: "name={{ item }} state=latest"
+  with_items: "{{ Additional_Build_Tools_RHEL10plus_x86 }}"
+  when:
+    - ansible_architecture == "x86_64"
+    - ansible_distribution_major_version | int >= 10
   tags: build_tools
 
 - name: Install additional build tools for RHEL on ppc64
@@ -103,45 +150,98 @@
     - (ansible_distribution_major_version == "6") or (ansible_distribution_major_version == "7")
   tags: build_tools
 
-- name: Install additional build tools for RHEL 8
-  package: "name={{ item }} state=latest"
-  with_items: "{{ Additional_Build_Tools_RHEL8 }}"
+- name: Install additional build tools for RHEL8 and above
+  command: dnf -y install {{ item }}
+  with_items: "{{ Additional_Build_Tools_RHEL8Plus }}"
   when:
-    - (ansible_distribution_major_version == "8")
+    - (ansible_distribution_major_version | int >= 8)
   tags: build_tools
+
+- name: Install jq for SBoM parsing for build reproducibility testing
+  command: dnf -y install jq
+  when:
+    - ansible_distribution_major_version > "7"
+  tags: test_tools
 
 #################
 # xorg Packages #
 #################
-- name: Install xorg-x11-server-Xorg if host is x86_64
-  yum: name=xorg-x11-server-Xorg state=installed
-  when: (ansible_architecture == "x86_64")
+- name: Install x11 packages (< RHEL10)
   tags: test_tools
+  when: ansible_distribution_major_version | int < 10
+  block:
+      # RHEL 8 and 9 — use cli
 
-- name: Install xorg-x11-server-common if host is s390x
-  yum: name=xorg-x11-server-common state=installed
-  when: (ansible_architecture == "s390x")
+    - name: Install xorg-x11-server-Xvfb (RHEL 8/9)
+      command: dnf -y install xorg-x11-server-Xvfb
+      when: ansible_distribution_major_version | int >= 8
+
+    - name: Install xorg-x11-server-Xorg on x86_64 (RHEL 8/9)
+      command: dnf -y install xorg-x11-server-Xorg
+      when:
+        - ansible_distribution_major_version | int >= 8
+        - ansible_architecture == "x86_64"
+
+    - name: Install xorg-x11-server-common on s390x (RHEL 8/9)
+      command: dnf -y install xorg-x11-server-common
+      when:
+        - ansible_distribution_major_version | int >= 8
+        - ansible_architecture == "s390x"
+
+    # RHEL 7 and earlier — keep modules
+
+    - name: Install xorg-x11-server-Xvfb (RHEL ≤ 7)
+      package:
+        name: xorg-x11-server-Xvfb
+        state: latest
+      when: ansible_distribution_major_version | int < 8
+
+    - name: Install xorg-x11-server-Xorg on x86_64 (RHEL ≤ 7)
+      yum:
+        name: xorg-x11-server-Xorg
+        state: installed
+      when:
+        - ansible_distribution_major_version | int < 8
+        - ansible_architecture == "x86_64"
+
+    - name: Install xorg-x11-server-common on s390x (RHEL ≤ 7)
+      yum:
+        name: xorg-x11-server-common
+        state: installed
+      when:
+        - ansible_distribution_major_version | int < 8
+        - ansible_architecture == "s390x"
+
+#############################
+# Configure Wayland(Weston) #
+#############################
+- name: Install Wayland related packages (>= RHEL10)
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items: "{{ Additional_Test_Tool_Packages_Wayland }}"
+  when: ansible_distribution_major_version | int > 9
   tags: test_tools
 
 ################
 # Install Java #
 ################
-- name: Install Java (Not RedHat 6 on ppc64)
+
+- name: Install Java when below Rhel8
   package: "name={{ item }} state=latest"
-  with_items: "{{ Java_NOT_RHEL6_PPC64 }}"
+  with_items: "{{ Java_NOT_RHEL8Plus }}"
   when:
-    - not (ansible_distribution_major_version == "6" and ansible_architecture == "ppc64")
-    - not (ansible_distribution_major_version == "8")
+    - not (ansible_distribution_major_version | int >= 8)
+  tags: install_java
 
-- name: Install Java when RedHat 6 on ppc64
+- name: Install Java when RedHat 8 and above
   package: "name={{ item }} state=latest"
-  with_items: "{{ Java_RHEL6_PPC64 }}"
-  when: (ansible_distribution_major_version == "6" and ansible_architecture == "ppc64")
+  with_items: "{{ Java_RHEL8Plus }}"
+  when:
+    - (ansible_distribution_major_version | int == 8)
+    - (ansible_distribution_major_version | int == 9)
 
-- name: Install Java when RedHat 8
-  package: "name={{ item }} state=latest"
-  with_items: "{{ Java_RHEL8 }}"
-  when: (ansible_distribution_major_version == "8")
+  tags: install_java
 
 ####################
 # Set default Java #
@@ -195,10 +295,16 @@
 # Locales #
 ###########
 
-- name: Install 'glibc-common' package
+- name: Install glibc-common (Prior to RHEL 8)
   package:
     name: glibc-common
     state: present
+  when: ansible_distribution_major_version | int < 8
+  tags: locales
+
+- name: Install glibc-common (RHEL 8+)
+  command: dnf -y install glibc-common
+  when: ansible_distribution_major_version | int >= 8
   tags: locales
 
 # Skipping linting as no alternative to shell can be used (lint error 305)
