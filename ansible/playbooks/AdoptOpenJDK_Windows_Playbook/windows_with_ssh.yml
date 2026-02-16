@@ -2,7 +2,8 @@
 ########################################
 # AdoptOpenJDK - Ansible Playbook for: #
 # -------- Windows 7, 8, 10 ---------  #
-# - Windows Server 2008, 2012        - #
+# - Windows Server 2022, 2025        - #
+# - With SSH support                   #
 ########################################
 
 ################
@@ -17,19 +18,24 @@
 # .\ConfigureRemotingForAnsible.ps1 -EnableCredSSP
 # .\ConfigureRemotingForAnsible.ps1 -ForceNewSSLCert
 # .\ConfigureRemotingForAnsible.ps1 -SkipNetworkProfileCheck
+#
+# Also Ensure That The Open SSH Server & Client Windows Features Are Installed
+# The Openssh server and agent process are running, and that the firewall Has
+# the relevant ports open for winrm and ssh.
 
 # Groups can be passed in as a command-line variable in Ansible playbook.
 # It can be defined as 'all' or a specific group which the host belongs to.
 # For example, it can be 'all' or 'x86' for when a host is in the group 'x86'.
 - name: Ansible Windows playbook
-  hosts: "{{ Groups | default('localhost:build:test:perf:jck:!*zos*:!*win*:!*aix*') }}"
+  hosts: all
   gather_facts: yes
-  tasks:
+  pre_tasks:
     - name: Load Standard Variables
       block:
       # Set standard variables
         - name: Load AdoptOpenJDKs variable file
           include_vars: group_vars/all/adoptopenjdk_variables.yml
+
 
   #########
   # Roles #
@@ -50,8 +56,9 @@
     - CodesignCert
     - 7-Zip                       # Mostly extracting other prereqs :-)
     - cygwin
+    - role: windows_openssh_config
+      tags: [windows_openssh_config, adoptopenjdk, vendor_files]
     - Strawberry_Perl             # Testing
-#    - Freemarker                  # OpenJ9"
     - GIT
     - Java7                       # JDK8 build bootstrap
     - Java8                       # JDK9 build bootstrap/ For Gradle
@@ -72,12 +79,6 @@
     - role: Java_install          # Latest LTS, for use by agents
       jdk_version: 25
     - ANT                         # Testing
-    - role: MSVS_2013
-      when: ansible_architecture == "64-bit"
-    - role: MSVS_2017             # OpenJ9
-      when: ansible_architecture == "64-bit"
-    - role: MSVS_2019                   # OpenJ9
-      tags: MSVS_2019
     - role: MSVS_2022
       tags: MSVS_2022
     - role: MSVS_2013_REDIST      # Required For Tests
@@ -96,9 +97,6 @@
     - Incredibuild                # Configure Incredibuild Dashboard Service
     - shortNames
     - Dragonwell                  # Dragonwell bootstrap image
-    - role: Jenkins_Service_Installation # Automate installing the jenkins service
-      tags: [jenkins, adoptopenjdk]
-      when: jenkins_secret is defined  # Only run if jenkins_secret is defined
     - role: logs
       position: "End"
       tags: always
